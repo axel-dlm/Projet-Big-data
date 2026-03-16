@@ -5,12 +5,19 @@
   "main": "etl.js",
   "scripts": {
     "download": "node scripts/download.js",
+    "download:all": "node scripts/download.js --all",
     "etl": "node etl.js",
-    "analyze": "node scripts/run-queries.js"
+    "etl:all": "node etl.js --all",
+    "analyze": "node scripts/run-queries.js",
+    "load:sqlite": "node scripts/load-sqlite.js",
+    "load:sqlite:all": "node scripts/load-sqlite.js --all",
+    "query:sqlite": "node scripts/query-sqlite.js",
+    "etl:full": "node scripts/download.js --all && node etl.js --all && node scripts/load-sqlite.js --all"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "better-sqlite3": "^12.8.0",
     "csv-parse": "^5.5.6",
     "dotenv": "^16.4.5",
     "knex": "^3.1.0",

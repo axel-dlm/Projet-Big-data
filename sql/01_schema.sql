@@ -123,7 +123,8 @@ CREATE TABLE fait_usagers (
     annee_naissance     SMALLINT,
     age_au_moment       SMALLINT,   -- calculé lors de la transformation
     type_trajet         SMALLINT,   -- 1=domicile-travail, 2=domicile-école, etc.
-    equipement_securite SMALLINT    -- ceinture, casque, etc.
+    equipement_securite SMALLINT,   -- ceinture, casque, etc.
+    annee_donnees       SMALLINT    -- année source des données (2012-2022)
 );
 
 
@@ -150,3 +151,6 @@ CREATE INDEX idx_lieu_dept       ON dim_lieu(departement);
 
 -- Index composites pour les requêtes croisées (sexe × gravité)
 CREATE INDEX idx_fait_sexe_gravite ON fait_usagers(id_sexe, id_gravite);
+
+-- Index pour les analyses temporelles multi-années
+CREATE INDEX idx_fait_annee        ON fait_usagers(annee_donnees);

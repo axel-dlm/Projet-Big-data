@@ -341,3 +341,164 @@ CROSS JOIN totaux t
 JOIN horaires  h  ON b.id_sexe = h.id_sexe
 LEFT JOIN age_modal am ON b.id_sexe = am.id_sexe
 ORDER BY b.id_sexe;
+
+
+-- ============================================================
+-- REQUÊTE 9 : Évolution du taux de mortalité H/F par année
+-- ============================================================
+-- Objectif : Voir si l'écart hommes/femmes se réduit sur 10 ans
+-- Nécessite : données multi-années (npm run etl -- --all)
+-- Techniques : GROUP BY multi-niveaux, Window Function par année
+
+SELECT
+    s.libelle                                               AS sexe,
+    fu.annee_donnees                                        AS annee,
+    COUNT(*)                                                AS total_victimes,
+    COUNT(*) FILTER (WHERE fu.id_gravite = 2)              AS nb_tues,
+    ROUND(
+        COUNT(*) FILTER (WHERE fu.id_gravite = 2) * 100.0 /
+        NULLIF(COUNT(*), 0), 2
+    )                                                       AS taux_mortalite_pct,
+    -- Part des tués de ce sexe parmi tous les tués de l'année
+    ROUND(
+        COUNT(*) FILTER (WHERE fu.id_gravite = 2) * 100.0 /
+        NULLIF(
+            SUM(COUNT(*) FILTER (WHERE fu.id_gravite = 2))
+            OVER (PARTITION BY fu.annee_donnees),
+            0
+        ), 1
+    )                                                       AS part_tues_annee_pct
+FROM fait_usagers fu
+JOIN dim_sexe s ON fu.id_sexe = s.id_sexe
+WHERE fu.annee_donnees IS NOT NULL
+GROUP BY fu.id_sexe, s.libelle, fu.annee_donnees
+ORDER BY fu.annee_donnees, fu.id_sexe;
+
+
+-- ============================================================
+-- REQUÊTE 10 : Nombre total de tués par année et par sexe
+-- ============================================================
+-- Objectif : Visualiser la courbe d'évolution sur 10 ans
+
+SELECT
+    fu.annee_donnees                                        AS annee,
+    COUNT(*) FILTER (WHERE fu.id_sexe = 1 AND fu.id_gravite = 2)  AS tues_hommes,
+    COUNT(*) FILTER (WHERE fu.id_sexe = 2 AND fu.id_gravite = 2)  AS tues_femmes,
+    COUNT(*) FILTER (WHERE fu.id_gravite = 2)              AS total_tues,
+    COUNT(*) FILTER (WHERE fu.id_sexe = 1)                 AS total_hommes,
+    COUNT(*) FILTER (WHERE fu.id_sexe = 2)                 AS total_femmes,
+    -- Taux par sexe sur l'année
+    ROUND(
+        COUNT(*) FILTER (WHERE fu.id_sexe = 1 AND fu.id_gravite = 2) * 100.0 /
+        NULLIF(COUNT(*) FILTER (WHERE fu.id_sexe = 1), 0), 2
+    )                                                       AS taux_mortalite_hommes,
+    ROUND(
+        COUNT(*) FILTER (WHERE fu.id_sexe = 2 AND fu.id_gravite = 2) * 100.0 /
+        NULLIF(COUNT(*) FILTER (WHERE fu.id_sexe = 2), 0), 2
+    )                                                       AS taux_mortalite_femmes
+FROM fait_usagers fu
+WHERE fu.annee_donnees IS NOT NULL
+GROUP BY fu.annee_donnees
+ORDER BY fu.annee_donnees;
+
+
+-- ============================================================
+-- REQUÊTE 11 : Année la plus meurtrière par sexe
+-- ============================================================
+-- Techniques : RANK() window function, sous-requête
+
+WITH tues_par_annee AS (
+    SELECT
+        s.libelle                                           AS sexe,
+        fu.annee_donnees                                    AS annee,
+        COUNT(*) FILTER (WHERE fu.id_gravite = 2)          AS nb_tues,
+        RANK() OVER (
+            PARTITION BY fu.id_sexe
+            ORDER BY COUNT(*) FILTER (WHERE fu.id_gravite = 2) DESC
+        )                                                   AS rang
+    FROM fait_usagers fu
+    JOIN dim_sexe s ON fu.id_sexe = s.id_sexe
+    WHERE fu.annee_donnees IS NOT NULL
+    GROUP BY fu.id_sexe, s.libelle, fu.annee_donnees
+)
+SELECT sexe, annee, nb_tues, rang
+FROM tues_par_annee
+WHERE rang <= 3   -- Top 3 années les plus meurtrières par sexe
+ORDER BY sexe, rang;
+
+
+-- ============================================================
+-- REQUÊTE 12 : Évolution du ratio H/F parmi les tués
+-- ============================================================
+-- Objectif : Le ratio se réduit-il avec les années ?
+
+WITH pivot AS (
+    SELECT
+        fu.annee_donnees                                    AS annee,
+        COUNT(*) FILTER (WHERE fu.id_sexe = 1 AND fu.id_gravite = 2) AS tues_h,
+        COUNT(*) FILTER (WHERE fu.id_sexe = 2 AND fu.id_gravite = 2) AS tues_f,
+        COUNT(*) FILTER (WHERE fu.id_gravite = 2)          AS total_tues
+    FROM fait_usagers fu
+    WHERE fu.annee_donnees IS NOT NULL
+    GROUP BY fu.annee_donnees
+)
+SELECT
+    annee,
+    tues_h,
+    tues_f,
+    total_tues,
+    ROUND(tues_h * 100.0 / NULLIF(total_tues, 0), 1)       AS pct_hommes,
+    ROUND(tues_f * 100.0 / NULLIF(total_tues, 0), 1)       AS pct_femmes,
+    -- Ratio H/F : combien d'hommes pour 1 femme tuée
+    ROUND(tues_h::NUMERIC / NULLIF(tues_f, 0), 2)          AS ratio_h_pour_1f,
+    -- Évolution vs année précédente (window function LAG)
+    ROUND(
+        tues_h * 100.0 / NULLIF(total_tues, 0) -
+        LAG(tues_h * 100.0 / NULLIF(total_tues, 0)) OVER (ORDER BY annee),
+        1
+    )                                                       AS variation_pct_hommes_vs_annee_prec
+FROM pivot
+ORDER BY annee;
+
+
+-- ============================================================
+-- REQUÊTE 13 : Comparaison avant / pendant / après COVID
+-- ============================================================
+-- Objectif : COVID-19 a-t-il eu un impact différent selon le sexe ?
+-- 2019 = avant, 2020-2021 = COVID, 2022 = après
+
+WITH periodes AS (
+    SELECT
+        fu.id_sexe,
+        s.libelle                                           AS sexe,
+        CASE
+            WHEN fu.annee_donnees = 2019 THEN 'Avant COVID (2019)'
+            WHEN fu.annee_donnees IN (2020, 2021) THEN 'Pendant COVID (2020-2021)'
+            WHEN fu.annee_donnees = 2022 THEN 'Après COVID (2022)'
+            ELSE 'Autre'
+        END                                                 AS periode,
+        fu.id_gravite,
+        fu.annee_donnees
+    FROM fait_usagers fu
+    JOIN dim_sexe s ON fu.id_sexe = s.id_sexe
+    WHERE fu.annee_donnees IN (2019, 2020, 2021, 2022)
+)
+SELECT
+    sexe,
+    periode,
+    COUNT(*)                                                AS total_victimes,
+    COUNT(*) FILTER (WHERE id_gravite = 2)                 AS nb_tues,
+    ROUND(
+        COUNT(*) FILTER (WHERE id_gravite = 2) * 100.0 /
+        NULLIF(COUNT(*), 0), 2
+    )                                                       AS taux_mortalite_pct,
+    COUNT(DISTINCT annee_donnees)                          AS nb_annees
+FROM periodes
+GROUP BY id_sexe, sexe, periode
+ORDER BY id_sexe,
+    CASE periode
+        WHEN 'Avant COVID (2019)'          THEN 1
+        WHEN 'Pendant COVID (2020-2021)'   THEN 2
+        WHEN 'Après COVID (2022)'          THEN 3
+        ELSE 4
+    END;

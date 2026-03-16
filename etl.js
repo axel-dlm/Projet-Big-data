@@ -1,11 +1,16 @@
 /**
- * Pipeline ETL principal - Accidents de la route en France 2022
+ * Pipeline ETL principal - Accidents de la route en France
  * Thématique : Comparaison de la mortalité par sexe
  *
  * Phases :
  *   1. EXTRACT  → Lecture des fichiers CSV (caractéristiques, usagers, véhicules)
  *   2. TRANSFORM → Nettoyage, conversion, enrichissement des données
  *   3. LOAD     → Insertion en base PostgreSQL (Neon) via Knex.js
+ *
+ * Usage :
+ *   node etl.js           → charge l'année 2022 uniquement (rétrocompatible)
+ *   node etl.js --all     → charge toutes les années disponibles (2012-2022)
+ *   node etl.js --year 2020 → charge une année spécifique
  */
 
 require('dotenv').config();
@@ -21,9 +26,6 @@ const knex = require('knex');
 const DATA_DIR = path.join(__dirname, 'data');
 const SQL_DIR = path.join(__dirname, 'sql');
 const BATCH_SIZE = 100; // Nombre de lignes insérées par batch
-
-// Valeur "inconnue" dans les datasets de l'ONISR
-const VALEUR_INCONNUE = -1;
 
 // Connexion Knex vers PostgreSQL (Neon)
 const db = knex({
@@ -103,38 +105,39 @@ async function insererParBatch(table, donnees, label) {
 // PHASE 1 : EXTRACT
 // ─────────────────────────────────────────────
 
-async function extract() {
-  console.log('\n' + '═'.repeat(60));
-  console.log('PHASE 1 — EXTRACT');
-  console.log('═'.repeat(60));
+async function extract(annee = 2022) {
+  // Cherche les CSV dans data/YYYY/ puis dans data/ (rétrocompatibilité 2022)
+  const dirs = [
+    path.join(DATA_DIR, String(annee)),
+    DATA_DIR
+  ];
 
   const lireCsv = (nomFichier) => {
-    const chemin = path.join(DATA_DIR, nomFichier);
-    if (!fs.existsSync(chemin)) {
-      throw new Error(`Fichier introuvable : ${chemin}\nLancez d'abord : npm run download`);
+    for (const dir of dirs) {
+      const chemin = path.join(dir, nomFichier);
+      if (fs.existsSync(chemin)) {
+        const contenu = fs.readFileSync(chemin, 'utf-8').replace(/^\uFEFF/, '');
+        return parse(contenu, {
+          delimiter: ';',
+          columns: true,
+          skip_empty_lines: true,
+          trim: true,
+          relax_column_count: true
+        });
+      }
     }
-    const contenu = fs.readFileSync(chemin, 'utf-8');
-    // Supprime le BOM UTF-8 si présent
-    const contenuPropre = contenu.replace(/^\uFEFF/, '');
-    const lignes = parse(contenuPropre, {
-      delimiter: ';',
-      columns: true,          // Utilise la première ligne comme en-têtes
-      skip_empty_lines: true,
-      trim: true,
-      relax_column_count: true
-    });
-    return lignes;
+    throw new Error(`Fichier introuvable : ${nomFichier} (année ${annee})\nLancez d'abord : npm run download`);
   };
 
-  console.log('Lecture des fichiers CSV...');
-  const caracteristiques = lireCsv('caracteristiques-2022.csv');
-  console.log(`  ✓ caracteristiques-2022.csv : ${caracteristiques.length} lignes`);
+  console.log(`\nLecture des fichiers CSV ${annee}...`);
+  const caracteristiques = lireCsv(`caracteristiques-${annee}.csv`);
+  console.log(`  ✓ caracteristiques-${annee}.csv : ${caracteristiques.length} lignes`);
 
-  const usagers = lireCsv('usagers-2022.csv');
-  console.log(`  ✓ usagers-2022.csv          : ${usagers.length} lignes`);
+  const usagers = lireCsv(`usagers-${annee}.csv`);
+  console.log(`  ✓ usagers-${annee}.csv          : ${usagers.length} lignes`);
 
-  const vehicules = lireCsv('vehicules-2022.csv');
-  console.log(`  ✓ vehicules-2022.csv        : ${vehicules.length} lignes`);
+  const vehicules = lireCsv(`vehicules-${annee}.csv`);
+  console.log(`  ✓ vehicules-${annee}.csv        : ${vehicules.length} lignes`);
 
   return { caracteristiques, usagers, vehicules };
 }
@@ -143,9 +146,9 @@ async function extract() {
 // PHASE 2 : TRANSFORM
 // ─────────────────────────────────────────────
 
-async function transform({ caracteristiques, usagers, vehicules }) {
+async function transform({ caracteristiques, usagers, vehicules }, annee = 2022) {
   console.log('\n' + '═'.repeat(60));
-  console.log('PHASE 2 — TRANSFORM');
+  console.log(`PHASE 2 — TRANSFORM (${annee})`);
   console.log('═'.repeat(60));
 
   // --- Transformation des caractéristiques (accidents) ---
@@ -158,7 +161,7 @@ async function transform({ caracteristiques, usagers, vehicules }) {
       num_acc: toStr(row.Accident_Id || row.num_acc || row.Num_Acc),
       jour: toInt(row.jour),
       mois: mois,
-      annee: toInt(row.an) || 2022,
+      annee: toInt(row.an) || annee,
       heure: toInt(heure),
       minute: toInt(minute),
       trimestre: calculerTrimestre(mois),
@@ -242,7 +245,8 @@ async function transform({ caracteristiques, usagers, vehicules }) {
       annee_naissance: anneeNaissance,
       age_au_moment: age,
       type_trajet: toInt(row.trajet),
-      equipement_securite: toInt(row.secu1)
+      equipement_securite: toInt(row.secu1 || row.secu), // secu1 (2019+) ou secu (avant 2019)
+      annee_donnees: annee
     };
   }).filter(u => u !== null);
 
@@ -264,106 +268,22 @@ async function transform({ caracteristiques, usagers, vehicules }) {
 // PHASE 3 : LOAD
 // ─────────────────────────────────────────────
 
-async function load({ accidentsTransformes, vehiculesTransformes, usagersTransformes }) {
-  console.log('\n' + '═'.repeat(60));
-  console.log('PHASE 3 — LOAD');
-  console.log('═'.repeat(60));
+/**
+ * Charge les données d'une année dans PostgreSQL
+ * Appelée par main() pour chaque année, avec des offsets cumulatifs
+ */
+async function loadDonnees({ accidentsTransformes, vehiculesTransformes, usagersTransformes }, annee = 2022, offsets = {}) {
+  const { offsetTemps = 0, offsetLieu = 0, offsetVehicule = 0, offsetUsager = 0 } = offsets;
 
-  // 1. Créer les tables (exécuter le schéma SQL)
-  console.log('\nCréation du schéma de base de données...');
-  const schemaSql = fs.readFileSync(path.join(SQL_DIR, '01_schema.sql'), 'utf-8');
+  console.log(`\nInsertion des données ${annee} en base...`);
 
-  // Exécute le schéma bloc par bloc (séparé par les points-virgules)
-  // Supprimer les commentaires SQL (-- ...) avant de découper par ";"
-  // sans ça, les blocs de commentaires qui précèdent un CREATE TABLE
-  // font croire que la déclaration commence par "--" et elle est ignorée
-  const sqlNettoye = schemaSql.replace(/--[^\n]*/g, '');
-  const statements = sqlNettoye
-    .split(';')
-    .map(s => s.trim())
-    .filter(s => s.length > 0);
-
-  for (const stmt of statements) {
-    await db.raw(stmt);
-  }
-  console.log('  ✓ Tables créées avec succès');
-
-  // 2. Insérer les tables de dimensions statiques
-  console.log('\nInsertion des données de référence (dimensions)...');
-
-  await db('dim_sexe').insert([
-    { id_sexe: 1, libelle: 'Masculin' },
-    { id_sexe: 2, libelle: 'Féminin' }
-  ]).onConflict('id_sexe').ignore();
-  console.log('  ✓ dim_sexe');
-
-  await db('dim_gravite').insert([
-    { id_gravite: 1, libelle: 'Indemne',       niveau_severite: 0 },
-    { id_gravite: 2, libelle: 'Tué',            niveau_severite: 3 },
-    { id_gravite: 3, libelle: 'Hospitalisé',    niveau_severite: 2 },
-    { id_gravite: 4, libelle: 'Blessé léger',   niveau_severite: 1 }
-  ]).onConflict('id_gravite').ignore();
-  console.log('  ✓ dim_gravite');
-
-  await db('dim_luminosite').insert([
-    { id_luminosite: 1, libelle: 'Plein jour' },
-    { id_luminosite: 2, libelle: 'Crépuscule ou aube' },
-    { id_luminosite: 3, libelle: 'Nuit sans éclairage public' },
-    { id_luminosite: 4, libelle: 'Nuit avec éclairage public non allumé' },
-    { id_luminosite: 5, libelle: 'Nuit avec éclairage public allumé' }
-  ]).onConflict('id_luminosite').ignore();
-  console.log('  ✓ dim_luminosite');
-
-  await db('dim_atmosphere').insert([
-    { id_atmosphere: 1, libelle: 'Normale' },
-    { id_atmosphere: 2, libelle: 'Pluie légère' },
-    { id_atmosphere: 3, libelle: 'Pluie forte' },
-    { id_atmosphere: 4, libelle: 'Neige ou grêle' },
-    { id_atmosphere: 5, libelle: 'Brouillard ou fumée' },
-    { id_atmosphere: 6, libelle: 'Vent fort ou tempête' },
-    { id_atmosphere: 7, libelle: 'Temps éblouissant' },
-    { id_atmosphere: 8, libelle: 'Temps couvert' },
-    { id_atmosphere: 9, libelle: 'Autre' }
-  ]).onConflict('id_atmosphere').ignore();
-  console.log('  ✓ dim_atmosphere');
-
-  await db('dim_categorie_vehicule').insert([
-    { id_categorie: 1,  libelle: 'Bicyclette' },
-    { id_categorie: 2,  libelle: 'Cyclomoteur <50cm3' },
-    { id_categorie: 3,  libelle: 'Voiturette' },
-    { id_categorie: 7,  libelle: 'VL seul' },
-    { id_categorie: 10, libelle: 'VU seul 1,5T<=PTAC<=3,5T' },
-    { id_categorie: 13, libelle: 'PL seul 3,5T<PTCA<=7,5T' },
-    { id_categorie: 14, libelle: 'PL seul > 7,5T' },
-    { id_categorie: 15, libelle: 'PL > 3,5T + remorque' },
-    { id_categorie: 16, libelle: 'Tracteur routier seul' },
-    { id_categorie: 17, libelle: 'Tracteur routier + semi-remorque' },
-    { id_categorie: 20, libelle: 'Engin spécial' },
-    { id_categorie: 21, libelle: 'Tracteur agricole' },
-    { id_categorie: 30, libelle: 'Scooter <50cm3' },
-    { id_categorie: 31, libelle: 'Motocyclette >50cm3 et <=125cm3' },
-    { id_categorie: 32, libelle: 'Scooter >50cm3 et <=125cm3' },
-    { id_categorie: 33, libelle: 'Motocyclette >125cm3' },
-    { id_categorie: 34, libelle: 'Scooter >125cm3' },
-    { id_categorie: 35, libelle: 'Quad léger <=50cm3' },
-    { id_categorie: 36, libelle: 'Quad lourd >50cm3' },
-    { id_categorie: 37, libelle: 'Autobus' },
-    { id_categorie: 38, libelle: 'Autocar' },
-    { id_categorie: 39, libelle: 'Train' },
-    { id_categorie: 40, libelle: 'Tramway' },
-    { id_categorie: 41, libelle: 'Tricycle à moteur <=50cm3' },
-    { id_categorie: 42, libelle: 'Tricycle à moteur >50cm3' },
-    { id_categorie: 43, libelle: 'EDP à moteur' },
-    { id_categorie: 99, libelle: 'Autre' }
-  ]).onConflict('id_categorie').ignore();
-  console.log('  ✓ dim_categorie_vehicule');
-
-  // 3. Insérer les dimensions liées aux accidents
+  // 1. Insérer les dimensions liées aux accidents
   console.log('\nInsertion des données de temps et de lieux...');
 
   // dim_temps : une ligne par accident (dates/heures)
+  // Les IDs utilisent un offset global pour éviter les conflits entre années
   const tempsDonnees = accidentsTransformes.map((acc, idx) => ({
-    id_temps: idx + 1,
+    id_temps: offsetTemps + idx + 1,
     jour: acc.jour,
     mois: acc.mois,
     annee: acc.annee,
@@ -376,7 +296,7 @@ async function load({ accidentsTransformes, vehiculesTransformes, usagersTransfo
 
   // dim_lieu : une ligne par accident (coordonnées géographiques)
   const lieuxDonnees = accidentsTransformes.map((acc, idx) => ({
-    id_lieu: idx + 1,
+    id_lieu: offsetLieu + idx + 1,
     departement: acc.departement,
     commune: acc.commune,
     agglomeration: acc.agglomeration,
@@ -394,8 +314,8 @@ async function load({ accidentsTransformes, vehiculesTransformes, usagersTransfo
 
   const accidentsDonnees = accidentsTransformes.map((acc, idx) => ({
     num_acc: acc.num_acc,
-    id_temps: idx + 1,
-    id_lieu: idx + 1,
+    id_temps: offsetTemps + idx + 1,
+    id_lieu:  offsetLieu  + idx + 1,
     // Mettre NULL si la valeur n'existe pas dans la dimension (évite FK violation)
     id_luminosite: LUMINOSITE_VALIDES.includes(acc.luminosite) ? acc.luminosite : null,
     id_atmosphere: ATMOSPHERE_VALIDES.includes(acc.conditions_atmo) ? acc.conditions_atmo : null,
@@ -416,7 +336,7 @@ async function load({ accidentsTransformes, vehiculesTransformes, usagersTransfo
   const CATEGORIES_VALIDES = [1,2,3,7,10,13,14,15,16,17,20,21,30,31,32,33,34,35,36,37,38,39,40,41,42,43,99];
 
   const vehiculesDonnees = vehiculesTransformes.map((v, idx) => ({
-    id_vehicule: idx + 1,
+    id_vehicule: offsetVehicule + idx + 1,
     num_acc: v.num_acc,
     num_veh: v.num_veh,
     id_categorie: CATEGORIES_VALIDES.includes(v.categorie_vehicule) ? v.categorie_vehicule : null,
@@ -435,7 +355,7 @@ async function load({ accidentsTransformes, vehiculesTransformes, usagersTransfo
 
   // 7. Insérer la table de faits
   console.log('\nInsertion de la table de faits (usagers)...');
-  let idUsager = 1;
+  let idUsager = offsetUsager + 1;
   const faitsDonnees = usagersTransformes.map((u) => {
     const idVehicule = vehiculesRef[`${u.num_acc}_${u.num_veh}`] || null;
     return {
@@ -449,17 +369,15 @@ async function load({ accidentsTransformes, vehiculesTransformes, usagersTransfo
       annee_naissance: u.annee_naissance,
       age_au_moment: u.age_au_moment,
       type_trajet: u.type_trajet,
-      equipement_securite: u.equipement_securite
+      equipement_securite: u.equipement_securite,
+      annee_donnees: u.annee_donnees
     };
   });
   await insererParBatch('fait_usagers', faitsDonnees, 'fait_usagers');
 
   console.log('\n' + '═'.repeat(60));
   console.log('CHARGEMENT TERMINÉ');
-  console.log('═'.repeat(60));
-  console.log(`  Accidents   : ${accidentsTransformes.length} lignes`);
-  console.log(`  Véhicules   : ${vehiculesDonnees.length} lignes`);
-  console.log(`  Usagers     : ${faitsDonnees.length} lignes`);
+  console.log(`  ✓ ${annee} : ${accidentsTransformes.length} accidents | ${vehiculesDonnees.length} véhicules | ${faitsDonnees.length} usagers`);
 }
 
 // ─────────────────────────────────────────────
@@ -467,26 +385,144 @@ async function load({ accidentsTransformes, vehiculesTransformes, usagersTransfo
 // ─────────────────────────────────────────────
 
 async function main() {
+  // Déterminer les années à traiter selon les arguments CLI
+  let annees;
+  if (process.argv.includes('--all')) {
+    // Toutes les années disponibles dans data/
+    annees = [];
+    for (let a = 2012; a <= 2022; a++) {
+      const dossier = path.join(DATA_DIR, String(a));
+      const fichierRacine = path.join(DATA_DIR, `caracteristiques-${a}.csv`);
+      if (fs.existsSync(path.join(dossier, `caracteristiques-${a}.csv`)) ||
+          (a === 2022 && fs.existsSync(fichierRacine))) {
+        annees.push(a);
+      }
+    }
+    if (annees.length === 0) {
+      console.error('\n  ✗ Aucune donnée trouvée dans data/. Lancez : npm run download:all');
+      process.exit(1);
+    }
+  } else {
+    const yearArg = process.argv.find(a => a.startsWith('--year='));
+    const annee   = yearArg ? parseInt(yearArg.split('=')[1]) : 2022;
+    annees = [annee];
+  }
+
   console.log('\n' + '█'.repeat(60));
-  console.log('  PIPELINE ETL — ACCIDENTS DE LA ROUTE EN FRANCE 2022');
+  console.log('  PIPELINE ETL — ACCIDENTS DE LA ROUTE EN FRANCE');
   console.log('  Thématique : Mortalité comparée par sexe');
   console.log('█'.repeat(60));
+  console.log(`  Années : ${annees.join(', ')}`);
   console.log(`  Démarrage : ${new Date().toLocaleString('fr-FR')}`);
 
   const debut = Date.now();
 
   try {
-    // EXTRACT
-    const brut = await extract();
+    // Créer le schéma une seule fois (DROP IF EXISTS → idempotent)
+    console.log('\n' + '═'.repeat(60));
+    console.log('PHASE 3 — LOAD : Création du schéma');
+    console.log('═'.repeat(60));
+    console.log('\nCréation du schéma de base de données...');
+    const schemaSql = fs.readFileSync(path.join(SQL_DIR, '01_schema.sql'), 'utf-8');
+    const sqlNettoye = schemaSql.replace(/--[^\n]*/g, '');
+    const statements = sqlNettoye.split(';').map(s => s.trim()).filter(s => s.length > 0);
+    for (const stmt of statements) await db.raw(stmt);
+    console.log('  ✓ Tables créées avec succès');
 
-    // TRANSFORM
-    const transforme = await transform(brut);
+    // Insérer les dimensions statiques une seule fois
+    await db('dim_sexe').insert([
+      { id_sexe: 1, libelle: 'Masculin' },
+      { id_sexe: 2, libelle: 'Féminin' }
+    ]).onConflict('id_sexe').ignore();
 
-    // LOAD
-    await load(transforme);
+    await db('dim_gravite').insert([
+      { id_gravite: 1, libelle: 'Indemne',      niveau_severite: 0 },
+      { id_gravite: 2, libelle: 'Tué',           niveau_severite: 3 },
+      { id_gravite: 3, libelle: 'Hospitalisé',   niveau_severite: 2 },
+      { id_gravite: 4, libelle: 'Blessé léger',  niveau_severite: 1 }
+    ]).onConflict('id_gravite').ignore();
+
+    await db('dim_luminosite').insert([
+      { id_luminosite: 1, libelle: 'Plein jour' },
+      { id_luminosite: 2, libelle: 'Crépuscule ou aube' },
+      { id_luminosite: 3, libelle: 'Nuit sans éclairage public' },
+      { id_luminosite: 4, libelle: 'Nuit avec éclairage public non allumé' },
+      { id_luminosite: 5, libelle: 'Nuit avec éclairage public allumé' }
+    ]).onConflict('id_luminosite').ignore();
+
+    await db('dim_atmosphere').insert([
+      { id_atmosphere: 1, libelle: 'Normale' },
+      { id_atmosphere: 2, libelle: 'Pluie légère' },
+      { id_atmosphere: 3, libelle: 'Pluie forte' },
+      { id_atmosphere: 4, libelle: 'Neige ou grêle' },
+      { id_atmosphere: 5, libelle: 'Brouillard ou fumée' },
+      { id_atmosphere: 6, libelle: 'Vent fort ou tempête' },
+      { id_atmosphere: 7, libelle: 'Temps éblouissant' },
+      { id_atmosphere: 8, libelle: 'Temps couvert' },
+      { id_atmosphere: 9, libelle: 'Autre' }
+    ]).onConflict('id_atmosphere').ignore();
+
+    await db('dim_categorie_vehicule').insert([
+      { id_categorie: 1,  libelle: 'Bicyclette' },
+      { id_categorie: 2,  libelle: 'Cyclomoteur <50cm3' },
+      { id_categorie: 3,  libelle: 'Voiturette' },
+      { id_categorie: 7,  libelle: 'VL seul' },
+      { id_categorie: 10, libelle: 'VU seul 1,5T<=PTAC<=3,5T' },
+      { id_categorie: 13, libelle: 'PL seul 3,5T<PTCA<=7,5T' },
+      { id_categorie: 14, libelle: 'PL seul > 7,5T' },
+      { id_categorie: 15, libelle: 'PL > 3,5T + remorque' },
+      { id_categorie: 16, libelle: 'Tracteur routier seul' },
+      { id_categorie: 17, libelle: 'Tracteur routier + semi-remorque' },
+      { id_categorie: 20, libelle: 'Engin spécial' },
+      { id_categorie: 21, libelle: 'Tracteur agricole' },
+      { id_categorie: 30, libelle: 'Scooter <50cm3' },
+      { id_categorie: 31, libelle: 'Motocyclette >50cm3 et <=125cm3' },
+      { id_categorie: 32, libelle: 'Scooter >50cm3 et <=125cm3' },
+      { id_categorie: 33, libelle: 'Motocyclette >125cm3' },
+      { id_categorie: 34, libelle: 'Scooter >125cm3' },
+      { id_categorie: 35, libelle: 'Quad léger <=50cm3' },
+      { id_categorie: 36, libelle: 'Quad lourd >50cm3' },
+      { id_categorie: 37, libelle: 'Autobus' },
+      { id_categorie: 38, libelle: 'Autocar' },
+      { id_categorie: 39, libelle: 'Train' },
+      { id_categorie: 40, libelle: 'Tramway' },
+      { id_categorie: 41, libelle: 'Tricycle à moteur <=50cm3' },
+      { id_categorie: 42, libelle: 'Tricycle à moteur >50cm3' },
+      { id_categorie: 43, libelle: 'EDP à moteur' },
+      { id_categorie: 99, libelle: 'Autre' }
+    ]).onConflict('id_categorie').ignore();
+    console.log('  ✓ Dimensions statiques insérées');
+
+    // Traiter chaque année avec des offsets cumulatifs pour les IDs
+    let offsetTemps    = 0;
+    let offsetLieu     = 0;
+    let offsetVehicule = 0;
+    let offsetUsager   = 0;
+
+    for (const annee of annees) {
+      console.log('\n' + '▓'.repeat(60));
+      console.log(`  TRAITEMENT ${annee}`);
+      console.log('▓'.repeat(60));
+
+      // EXTRACT
+      const brut = await extract(annee);
+
+      // TRANSFORM
+      const transforme = await transform(brut, annee);
+
+      // LOAD (sans recréer le schéma ni les dimensions)
+      await loadDonnees(transforme, annee, { offsetTemps, offsetLieu, offsetVehicule, offsetUsager });
+
+      // Mettre à jour les offsets pour l'année suivante
+      offsetTemps    += transforme.accidentsTransformes.length;
+      offsetLieu     += transforme.accidentsTransformes.length;
+      offsetVehicule += transforme.vehiculesTransformes.length;
+      offsetUsager   += transforme.usagersTransformes.length;
+    }
 
     const duree = Math.round((Date.now() - debut) / 1000);
     console.log(`\n  ✓ Pipeline terminé en ${duree} secondes`);
+    console.log(`  ✓ Total : ${offsetUsager.toLocaleString('fr-FR')} usagers chargés`);
     console.log('  → Vous pouvez maintenant exécuter : npm run analyze\n');
 
   } catch (err) {
