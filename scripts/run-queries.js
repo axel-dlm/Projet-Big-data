@@ -37,6 +37,53 @@ function afficherResultats(titre, resultats) {
   console.table(resultats);
 }
 
+/** Affiche le tableau des régions avec colonnes alignées et lisibles */
+function afficherRegions(rows) {
+  console.log('\n' + '═'.repeat(70));
+  console.log('  REQUÊTE 14 — Comparaison par région (mortalité H/F)');
+  console.log('═'.repeat(70));
+  if (rows.length === 0) { console.log('  Aucun résultat.'); return; }
+
+  const pad = (s, n) => String(s).padEnd(n);
+  const padL = (s, n) => String(s).padStart(n);
+
+  const SEP = '─'.repeat(118);
+  const header = [
+    pad('Région', 30),
+    padL('Victimes', 9),
+    padL('Hommes', 8),
+    padL('Femmes', 8),
+    padL('Tués', 6),
+    padL('Tués H', 7),
+    padL('Tués F', 7),
+    padL('Mort.%', 7),
+    padL('Mort.H%', 8),
+    padL('Mort.F%', 8),
+  ].join('  ');
+
+  console.log('\n  ' + header);
+  console.log('  ' + SEP);
+
+  for (const r of rows) {
+    const ligne = [
+      pad(r.region, 30),
+      padL(r.total_victimes, 9),
+      padL(r.victimes_hommes, 8),
+      padL(r.victimes_femmes, 8),
+      padL(r.nb_tues, 6),
+      padL(r.tues_hommes, 7),
+      padL(r.tues_femmes, 7),
+      padL(r.taux_mortalite_pct != null ? r.taux_mortalite_pct + '%' : '-', 7),
+      padL(r.taux_mortalite_hommes_pct != null ? r.taux_mortalite_hommes_pct + '%' : '-', 8),
+      padL(r.taux_mortalite_femmes_pct != null ? r.taux_mortalite_femmes_pct + '%' : '-', 8),
+    ].join('  ');
+    console.log('  ' + ligne);
+  }
+
+  console.log('  ' + SEP);
+  console.log('');
+}
+
 /** Sauvegarde les résultats en JSON dans le dossier output/ */
 function sauvegarderJson(nomFichier, data) {
   const chemin = path.join(OUTPUT_DIR, nomFichier);
@@ -459,6 +506,153 @@ async function requete13() {
 }
 
 // ─────────────────────────────────────────────
+// REQUÊTE 14 : Comparaison par région
+// ─────────────────────────────────────────────
+async function requete14() {
+  const resultats = await db.raw(`
+    WITH region_mapping AS (
+      SELECT
+        fu.id_usager,
+        fu.id_sexe,
+        fu.id_gravite,
+        CASE dl.departement
+          WHEN '01' THEN 'Auvergne-Rhône-Alpes'
+          WHEN '03' THEN 'Auvergne-Rhône-Alpes'
+          WHEN '07' THEN 'Auvergne-Rhône-Alpes'
+          WHEN '15' THEN 'Auvergne-Rhône-Alpes'
+          WHEN '26' THEN 'Auvergne-Rhône-Alpes'
+          WHEN '38' THEN 'Auvergne-Rhône-Alpes'
+          WHEN '42' THEN 'Auvergne-Rhône-Alpes'
+          WHEN '43' THEN 'Auvergne-Rhône-Alpes'
+          WHEN '63' THEN 'Auvergne-Rhône-Alpes'
+          WHEN '69' THEN 'Auvergne-Rhône-Alpes'
+          WHEN '73' THEN 'Auvergne-Rhône-Alpes'
+          WHEN '74' THEN 'Auvergne-Rhône-Alpes'
+          WHEN '21' THEN 'Bourgogne-Franche-Comté'
+          WHEN '25' THEN 'Bourgogne-Franche-Comté'
+          WHEN '39' THEN 'Bourgogne-Franche-Comté'
+          WHEN '58' THEN 'Bourgogne-Franche-Comté'
+          WHEN '70' THEN 'Bourgogne-Franche-Comté'
+          WHEN '71' THEN 'Bourgogne-Franche-Comté'
+          WHEN '89' THEN 'Bourgogne-Franche-Comté'
+          WHEN '90' THEN 'Bourgogne-Franche-Comté'
+          WHEN '22' THEN 'Bretagne'
+          WHEN '29' THEN 'Bretagne'
+          WHEN '35' THEN 'Bretagne'
+          WHEN '56' THEN 'Bretagne'
+          WHEN '18' THEN 'Centre-Val de Loire'
+          WHEN '28' THEN 'Centre-Val de Loire'
+          WHEN '36' THEN 'Centre-Val de Loire'
+          WHEN '37' THEN 'Centre-Val de Loire'
+          WHEN '41' THEN 'Centre-Val de Loire'
+          WHEN '45' THEN 'Centre-Val de Loire'
+          WHEN '2A' THEN 'Corse'
+          WHEN '2B' THEN 'Corse'
+          WHEN '08' THEN 'Grand Est'
+          WHEN '10' THEN 'Grand Est'
+          WHEN '51' THEN 'Grand Est'
+          WHEN '52' THEN 'Grand Est'
+          WHEN '54' THEN 'Grand Est'
+          WHEN '55' THEN 'Grand Est'
+          WHEN '57' THEN 'Grand Est'
+          WHEN '67' THEN 'Grand Est'
+          WHEN '68' THEN 'Grand Est'
+          WHEN '88' THEN 'Grand Est'
+          WHEN '02' THEN 'Hauts-de-France'
+          WHEN '59' THEN 'Hauts-de-France'
+          WHEN '60' THEN 'Hauts-de-France'
+          WHEN '62' THEN 'Hauts-de-France'
+          WHEN '80' THEN 'Hauts-de-France'
+          WHEN '75' THEN 'Île-de-France'
+          WHEN '77' THEN 'Île-de-France'
+          WHEN '78' THEN 'Île-de-France'
+          WHEN '91' THEN 'Île-de-France'
+          WHEN '92' THEN 'Île-de-France'
+          WHEN '93' THEN 'Île-de-France'
+          WHEN '94' THEN 'Île-de-France'
+          WHEN '95' THEN 'Île-de-France'
+          WHEN '14' THEN 'Normandie'
+          WHEN '27' THEN 'Normandie'
+          WHEN '50' THEN 'Normandie'
+          WHEN '61' THEN 'Normandie'
+          WHEN '76' THEN 'Normandie'
+          WHEN '16' THEN 'Nouvelle-Aquitaine'
+          WHEN '17' THEN 'Nouvelle-Aquitaine'
+          WHEN '19' THEN 'Nouvelle-Aquitaine'
+          WHEN '23' THEN 'Nouvelle-Aquitaine'
+          WHEN '24' THEN 'Nouvelle-Aquitaine'
+          WHEN '33' THEN 'Nouvelle-Aquitaine'
+          WHEN '40' THEN 'Nouvelle-Aquitaine'
+          WHEN '47' THEN 'Nouvelle-Aquitaine'
+          WHEN '64' THEN 'Nouvelle-Aquitaine'
+          WHEN '79' THEN 'Nouvelle-Aquitaine'
+          WHEN '86' THEN 'Nouvelle-Aquitaine'
+          WHEN '87' THEN 'Nouvelle-Aquitaine'
+          WHEN '09' THEN 'Occitanie'
+          WHEN '11' THEN 'Occitanie'
+          WHEN '12' THEN 'Occitanie'
+          WHEN '30' THEN 'Occitanie'
+          WHEN '31' THEN 'Occitanie'
+          WHEN '32' THEN 'Occitanie'
+          WHEN '34' THEN 'Occitanie'
+          WHEN '46' THEN 'Occitanie'
+          WHEN '48' THEN 'Occitanie'
+          WHEN '65' THEN 'Occitanie'
+          WHEN '66' THEN 'Occitanie'
+          WHEN '81' THEN 'Occitanie'
+          WHEN '82' THEN 'Occitanie'
+          WHEN '44' THEN 'Pays de la Loire'
+          WHEN '49' THEN 'Pays de la Loire'
+          WHEN '53' THEN 'Pays de la Loire'
+          WHEN '72' THEN 'Pays de la Loire'
+          WHEN '85' THEN 'Pays de la Loire'
+          WHEN '04' THEN 'Provence-Alpes-Côte d''Azur'
+          WHEN '05' THEN 'Provence-Alpes-Côte d''Azur'
+          WHEN '06' THEN 'Provence-Alpes-Côte d''Azur'
+          WHEN '13' THEN 'Provence-Alpes-Côte d''Azur'
+          WHEN '83' THEN 'Provence-Alpes-Côte d''Azur'
+          WHEN '84' THEN 'Provence-Alpes-Côte d''Azur'
+          WHEN '971' THEN 'Outre-Mer'
+          WHEN '972' THEN 'Outre-Mer'
+          WHEN '973' THEN 'Outre-Mer'
+          WHEN '974' THEN 'Outre-Mer'
+          WHEN '976' THEN 'Outre-Mer'
+          ELSE 'Non renseigné'
+        END AS region
+      FROM fait_usagers fu
+      JOIN dim_accident da ON fu.num_acc = da.num_acc
+      JOIN dim_lieu     dl ON da.id_lieu = dl.id_lieu
+    )
+    SELECT
+      region,
+      COUNT(*)                                                          AS total_victimes,
+      COUNT(*) FILTER (WHERE id_sexe = 1)                              AS victimes_hommes,
+      COUNT(*) FILTER (WHERE id_sexe = 2)                              AS victimes_femmes,
+      COUNT(*) FILTER (WHERE id_gravite = 2)                           AS nb_tues,
+      COUNT(*) FILTER (WHERE id_gravite = 2 AND id_sexe = 1)          AS tues_hommes,
+      COUNT(*) FILTER (WHERE id_gravite = 2 AND id_sexe = 2)          AS tues_femmes,
+      ROUND(
+        COUNT(*) FILTER (WHERE id_gravite = 2) * 100.0 /
+        NULLIF(COUNT(*), 0), 2
+      )                                                                 AS taux_mortalite_pct,
+      ROUND(
+        COUNT(*) FILTER (WHERE id_gravite = 2 AND id_sexe = 1) * 100.0 /
+        NULLIF(COUNT(*) FILTER (WHERE id_sexe = 1), 0), 2
+      )                                                                 AS taux_mortalite_hommes_pct,
+      ROUND(
+        COUNT(*) FILTER (WHERE id_gravite = 2 AND id_sexe = 2) * 100.0 /
+        NULLIF(COUNT(*) FILTER (WHERE id_sexe = 2), 0), 2
+      )                                                                 AS taux_mortalite_femmes_pct
+    FROM region_mapping
+    GROUP BY region
+    ORDER BY nb_tues DESC
+  `);
+  afficherRegions(resultats.rows);
+  sauvegarderJson('req14_regions.json', resultats.rows);
+  return resultats.rows;
+}
+
+// ─────────────────────────────────────────────
 // MAIN
 // ─────────────────────────────────────────────
 async function main() {
@@ -493,6 +687,7 @@ async function main() {
     await requete6();
     await requete7();
     await requete8();
+    await requete14();
 
     // Requêtes multi-années (seulement si plusieurs années en base)
     if (multiAnnees) {

@@ -1,29 +1,32 @@
-# Projet ETL — Accidents de la Route en France 2022
+# Projet ETL — Accidents de la Route en France 2012–2022
 
 **Web School Factory — SQL 4 Big Data — Cours de Gerard Toko**
 
-> **Thématique :** Comparer la mortalité dans les accidents de voiture en France selon le sexe.
+> **Thématique :** Comparer la mortalité dans les accidents de voiture en France selon le sexe, sur 11 années de données (2012–2022).
 
 ---
 
-## Résultat clé
+## Résultats clés
 
-> **~75% des personnes tuées sur les routes françaises en 2022 sont des hommes.**
-> Le taux de mortalité masculin (~3.2%) est environ **2 fois supérieur** au taux féminin (~1.6%).
+> **~75% des personnes tuées sur les routes françaises sont des hommes.**
+> Le taux de mortalité masculin (~3.27%) est environ **1.65× supérieur** au taux féminin (~1.98%).
+> La **Corse** et l'**Outre-Mer** affichent les taux de mortalité les plus élevés par région.
+> Les décès ont baissé de **−29%** entre 2012 et 2022 (de 3 645 à 3 267 tués).
 
 ---
 
 ## Technologies utilisées
 
-| Composant        | Technologie                              |
-|------------------|------------------------------------------|
-| Scripting        | Node.js 18+                              |
-| Base de données  | PostgreSQL (hébergée sur **Neon**)       |
-| ORM              | Knex.js                                  |
-| Parsing CSV      | csv-parse                                |
-| Variables env    | dotenv                                   |
-| Visualisation    | Chart.js (HTML/JS)                       |
-| Source de données| data.gouv.fr — ONISR 2022                |
+| Composant         | Technologie                                      |
+|-------------------|--------------------------------------------------|
+| Scripting         | Node.js 18+                                      |
+| Base de données   | PostgreSQL (hébergée sur **Neon**)               |
+| Base locale       | SQLite (`better-sqlite3`) — mode offline         |
+| ORM               | Knex.js                                          |
+| Parsing CSV       | csv-parse (auto-détection délimiteur `,` ou `;`) |
+| Variables env     | dotenv                                           |
+| Visualisation     | Chart.js — Dashboard HTML interactif             |
+| Source de données | data.gouv.fr — ONISR 2012–2022                   |
 
 ---
 
@@ -31,26 +34,32 @@
 
 ```
 etl-accidents/
-├── .env                       ← Connexion Neon (NON commité)
+├── .env                          ← Connexion Neon (NON commité)
 ├── .gitignore
 ├── package.json
 ├── README.md
-├── etl.js                     ← Pipeline ETL principal (Extract → Transform → Load)
-├── knexfile.js                ← Configuration Knex.js
+├── etl.js                        ← Pipeline ETL principal (Extract → Transform → Load)
+│                                    Modes : 2022 seul | --year=YYYY | --all (2012–2022)
+├── knexfile.js                   ← Configuration Knex.js
 ├── data/
-│   ├── caracteristiques-2022.csv   ← Données accidents (à télécharger)
-│   ├── usagers-2022.csv            ← Données usagers
-│   └── vehicules-2022.csv          ← Données véhicules
+│   ├── 2012/                     ← Un dossier par année
+│   │   ├── caracteristiques-2012.csv
+│   │   ├── usagers-2012.csv
+│   │   └── vehicules-2012.csv
+│   ├── …/
+│   └── 2022/
 ├── sql/
-│   ├── 01_schema.sql          ← Schéma Star Schema (CREATE TABLE + INDEX)
-│   └── 02_analyses.sql        ← 8 requêtes analytiques SQL avancées
+│   ├── 01_schema.sql             ← Schéma Star Schema (CREATE TABLE + INDEX)
+│   └── 02_analyses.sql           ← 14 requêtes analytiques SQL avancées
 ├── scripts/
-│   ├── download.js            ← Téléchargement automatique des CSV
-│   ├── run-queries.js         ← Exécution des 8 analyses SQL
-│   ├── visualize.js           ← Mise à jour du dashboard avec données réelles
-│   └── dashboard.html         ← Dashboard interactif (Chart.js)
+│   ├── download.js               ← Téléchargement automatique depuis data.gouv.fr
+│   ├── run-queries.js            ← Exécution des 14 analyses SQL (PostgreSQL)
+│   ├── load-sqlite.js            ← Chargement en SQLite local (offline)
+│   ├── query-sqlite.js           ← Requêtes sur SQLite
+│   ├── visualize.js              ← Mise à jour du dashboard avec données réelles
+│   └── dashboard.html            ← Dashboard interactif multi-onglets (Chart.js)
 └── output/
-    └── *.json                 ← Résultats exportés des requêtes
+    └── *.json                    ← Résultats exportés des requêtes
 ```
 
 ---
@@ -78,8 +87,6 @@ cd Projet-Big-data
 npm install
 ```
 
-> Installe : `knex`, `pg`, `csv-parse`, `dotenv`
-
 ---
 
 ### 2. Configurer la connexion base de données
@@ -97,55 +104,83 @@ DATABASE_URL=postgresql://user:motdepasse@ep-xxxxx.us-east-2.aws.neon.tech/neond
 ### 3. Télécharger les données CSV
 
 ```bash
+# 2022 uniquement (par défaut)
 npm run download
+
+# Toutes les années 2012–2022
+npm run download:all
 ```
 
-Télécharge automatiquement les 3 fichiers depuis data.gouv.fr dans `data/` :
-- `caracteristiques-2022.csv` (caractéristiques des accidents)
-- `usagers-2022.csv` (personnes impliquées)
-- `vehicules-2022.csv` (véhicules impliqués)
+Télécharge automatiquement les 3 fichiers par année depuis data.gouv.fr :
+- `caracteristiques-YYYY.csv` — caractéristiques des accidents
+- `usagers-YYYY.csv` — personnes impliquées
+- `vehicules-YYYY.csv` — véhicules impliqués
 
-> **Si le téléchargement échoue**, téléchargez manuellement sur [data.gouv.fr](https://www.data.gouv.fr/datasets/bases-de-donnees-annuelles-des-accidents-corporels-de-la-circulation-routiere-annees-de-2005-a-2024), année 2022, et placez les fichiers dans `data/`.
+> **Si le téléchargement échoue**, téléchargez manuellement sur [data.gouv.fr](https://www.data.gouv.fr/datasets/bases-de-donnees-annuelles-des-accidents-corporels-de-la-circulation-routiere-annees-de-2005-a-2024) et placez les fichiers dans `data/YYYY/`.
 
 ---
 
 ### 4. Lancer le pipeline ETL
 
 ```bash
+# Année 2022 uniquement
 npm run etl
+
+# Toutes les années 2012–2022
+npm run etl:all
+
+# Une année spécifique
+node etl.js --year=2019
 ```
 
-Ce script effectue 3 phases :
-1. **Extract** — lit les 3 CSV (~130 000 lignes)
-2. **Transform** — nettoie les données, calcule les âges, valide les valeurs
-3. **Load** — crée le star schema sur Neon et insère toutes les données par batches
+3 phases :
+1. **Extract** — lit les CSV avec auto-détection du délimiteur (`,` avant 2018, `;` après)
+2. **Transform** — nettoie, calcule les âges, valide les coordonnées GPS
+3. **Load** — crée le star schema sur Neon et insère par batches
 
-Durée estimée : **2 à 5 minutes** selon la connexion internet.
+#### Variante SQLite (sans connexion internet)
+
+```bash
+npm run load:sqlite        # 2022 uniquement
+npm run load:sqlite:all    # 2012–2022
+```
 
 ---
 
 ### 5. Exécuter les analyses SQL
 
 ```bash
+# PostgreSQL
 npm run analyze
+
+# SQLite
+npm run query:sqlite
 ```
 
-Lance les 8 requêtes analytiques, affiche les résultats dans le terminal et sauvegarde les fichiers JSON dans `output/`.
+Lance les 14 requêtes analytiques, affiche les résultats dans le terminal et sauvegarde les fichiers JSON dans `output/`.
 
 ---
 
-### 6. Visualiser le dashboard
+### 6. Ouvrir le dashboard
 
 ```bash
-node scripts/visualize.js
+open scripts/dashboard.html
 ```
 
-Puis ouvrez `scripts/dashboard.html` dans votre navigateur (double-clic sur le fichier, ou via l'extension **Live Server** de VS Code).
+---
 
-Le dashboard affiche :
-- Les KPIs clés (taux de mortalité, nombre de tués...)
-- 5 graphiques interactifs (Chart.js)
-- Un tableau récapitulatif complet par sexe
+## Dashboard interactif
+
+Le dashboard `scripts/dashboard.html` s'ouvre directement dans le navigateur (aucun serveur requis).
+
+**4 onglets :**
+
+| Onglet | Contenu |
+|--------|---------|
+| **Vue d'ensemble** | KPIs, gravité par sexe, donut tués, évolution mensuelle, rôle, luminosité, type de route |
+| **Par région** | Tableau trié/filtrable avec 15 régions, mini-barres de progression, badges de risque colorés |
+| **Tendances 2012–2022** | Courbe évolution, taux H/F, impact COVID, tableau annuel avec deltas |
+| **Profil des victimes** | Tranches d'âge, radar, horaires, type de véhicule, conditions météo |
 
 ---
 
@@ -186,15 +221,15 @@ Le dashboard affiche :
                     │  id_vehicule FK → dim_vehicule      │
                     │  id_sexe    FK → dim_sexe           │
                     │  id_gravite FK → dim_gravite        │
-                    │  categorie_usager (1=cond/2=pass/3=piéton)│
+                    │  categorie_usager                   │
                     │  age_au_moment (calculé)            │
-                    │  type_trajet                        │
+                    │  annee_donnees (2012–2022)          │
                     └────────────────────────────────────┘
 ```
 
 ---
 
-## Requêtes analytiques (résumé)
+## Requêtes analytiques (14 au total)
 
 | # | Titre | Techniques SQL |
 |---|-------|----------------|
@@ -206,25 +241,23 @@ Le dashboard affiche :
 | 6 | Mortalité par rôle (cond/pass/piéton) | `CASE WHEN`, Window Function |
 | 7 | Top véhicules par sexe | `RANK() OVER PARTITION`, sous-requête |
 | 8 | Tableau récapitulatif complet | 4 CTEs enchaînées, `CROSS JOIN` |
+| 9 | Évolution annuelle par sexe | `GROUP BY annee_donnees` |
+| 10 | Total tués par année | Agrégation temporelle |
+| 11 | Top années les plus meurtrières | `RANK() OVER` |
+| 12 | Évolution du ratio H/F | Window Function sur séries temporelles |
+| 13 | Avant / Pendant / Après COVID | `CASE WHEN` sur périodes |
+| 14 | **Comparaison par région** | Mapping département → région, `FILTER WHERE` |
 
 ---
 
-## Exemples de résultats (2022)
+## Résultats clés par région (2022)
 
-### Taux de mortalité par sexe
-| Sexe      | Total impliqués | Tués  | Taux mortalité | Part des tués |
-|-----------|----------------|-------|----------------|---------------|
-| Masculin  | 84 794         | 2 777 | **3.27%**      | **78.2%**     |
-| Féminin   | 39 123         | 773   | **1.98%**      | **21.8%**     |
-
-### Observations clés
-- Les hommes représentent **68.4%** des usagers impliqués mais **78.2% des tués**
-- Le taux de mortalité masculin (**3.27%**) est **1.65× celui des femmes** (1.98%)
-- Nuit sans éclairage : taux de mortalité le plus élevé — **7.84%** chez les hommes
-- Tranche d'âge la plus touchée chez les hommes : **+65 ans** (7.62%) et **18-25 ans** (2.97%)
-- Piétons hommes : taux de **7.08%** — le rôle le plus dangereux
-- Moto >125cm3 : **455 hommes tués** vs 39 femmes
-- Pic de décès masculins : **juillet** (293 tués)
+| Région | Tués | Taux mortalité | Taux H | Taux F |
+|--------|------|----------------|--------|--------|
+| Corse | 34 | 3.47% | 3.88% | 2.58% |
+| Outre-Mer | 130 | 3.01% | 3.32% | 2.34% |
+| Centre-Val de Loire | 163 | 2.90% | 3.24% | 2.20% |
+| Île-de-France | 296 | 1.39% | 1.60% | 0.97% |
 
 ---
 
@@ -233,6 +266,7 @@ Le dashboard affiche :
 - **URL** : [data.gouv.fr — Accidents corporels](https://www.data.gouv.fr/datasets/bases-de-donnees-annuelles-des-accidents-corporels-de-la-circulation-routiere-annees-de-2005-a-2024)
 - **Producteur** : ONISR (Observatoire National Interministériel de la Sécurité Routière)
 - **Licence** : Licence Ouverte / Open Licence
-- **Séparateur CSV** : point-virgule (`;`)
+- **Années disponibles** : 2012 à 2022 (11 années)
+- **Séparateur CSV** : `,` (avant 2018) ou `;` (2018 et après) — auto-détecté
 - **Encodage** : UTF-8
 - **Valeur inconnue** : `-1` (traité comme `NULL` lors de la transformation)

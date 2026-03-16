@@ -55,6 +55,13 @@ function toFloat(val) {
   return isNaN(f) ? null : f;
 }
 
+/** Convertit une coordonnée GPS, retourne null si hors bornes valides */
+function toCoord(val, min, max) {
+  const f = toFloat(val);
+  if (f === null) return null;
+  return f >= min && f <= max ? f : null;
+}
+
 /** Nettoie une chaîne de caractères */
 function toStr(val) {
   if (val === null || val === undefined) return null;
@@ -117,12 +124,16 @@ async function extract(annee = 2022) {
       const chemin = path.join(dir, nomFichier);
       if (fs.existsSync(chemin)) {
         const contenu = fs.readFileSync(chemin, 'utf-8').replace(/^\uFEFF/, '');
+        // Auto-détection du délimiteur : anciennes années (≤2018) utilisent ','
+        const premiereLigne = contenu.split('\n')[0] || '';
+        const delimiter = premiereLigne.includes(';') ? ';' : ',';
         return parse(contenu, {
-          delimiter: ';',
+          delimiter,
           columns: true,
           skip_empty_lines: true,
           trim: true,
-          relax_column_count: true
+          relax_column_count: true,
+          relax_quotes: true
         });
       }
     }
@@ -170,8 +181,8 @@ async function transform({ caracteristiques, usagers, vehicules }, annee = 2022)
       commune: toStr(row.com),
       agglomeration: toInt(row.agg),
       adresse: toStr(row.adr),
-      latitude: toFloat(row.lat),
-      longitude: toFloat(row.long),
+      latitude: toCoord(row.lat, -90, 90),
+      longitude: toCoord(row.long, -180, 180),
       luminosite: toInt(row.lum),
       conditions_atmo: toInt(row.atm),
       type_intersection: toInt(row.int),

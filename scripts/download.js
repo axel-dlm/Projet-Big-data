@@ -26,7 +26,7 @@ const DATA_DIR = path.join(__dirname, '..', 'data');
 // Identifiant du dataset sur data.gouv.fr
 // URL de la page : https://www.data.gouv.fr/fr/datasets/bases-de-donnees-annuelles-des-accidents-corporels-de-la-circulation-routiere-annees-de-2005-a-2024/
 const DATASET_SLUG = 'bases-de-donnees-annuelles-des-accidents-corporels-de-la-circulation-routiere-annees-de-2005-a-2024';
-const API_URL      = `https://www.data.gouv.fr/api/1/datasets/${DATASET_SLUG}/resources/?page_size=200`;
+const API_URL      = `https://www.data.gouv.fr/api/1/datasets/${DATASET_SLUG}/`;
 
 // Plage d'années disponibles
 const ANNEE_MIN = 2012;
@@ -172,8 +172,8 @@ async function fetchResources() {
   try {
     const json = await fetchTexte(API_URL);
     const data = JSON.parse(json);
-    // L'API peut renvoyer { data: [...] } ou directement un tableau
-    return Array.isArray(data) ? data : (data.data || []);
+    // L'API retourne un objet dataset avec resources[] directement
+    return Array.isArray(data.resources) ? data.resources : [];
   } catch (err) {
     console.warn(`  ⚠ API indisponible : ${err.message}`);
     return [];

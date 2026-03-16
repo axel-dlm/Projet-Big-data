@@ -3,627 +3,1125 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Dashboard — Accidents de la Route en France 2022</title>
+  <title>Dashboard — Accidents de la Route en France</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+    :root {
+      --bg:        #080d17;
+      --surface:   #0f1929;
+      --surface2:  #162035;
+      --border:    #1e2d45;
+      --text:      #e2e8f0;
+      --muted:     #64748b;
+      --blue:      #3b82f6;
+      --pink:      #ec4899;
+      --red:       #ef4444;
+      --orange:    #f97316;
+      --green:     #22c55e;
+      --purple:    #a855f7;
+      --cyan:      #06b6d4;
+      --yellow:    #eab308;
+    }
+
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
-      font-family: 'Segoe UI', Arial, sans-serif;
-      background: #0f172a;
-      color: #e2e8f0;
+      font-family: 'Inter', 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
       min-height: 100vh;
+      overflow-x: hidden;
     }
 
+    /* ── HEADER ── */
     header {
-      background: linear-gradient(135deg, #1e3a5f 0%, #1e293b 100%);
+      background: linear-gradient(135deg, #0a1628 0%, #0f2040 50%, #0a1628 100%);
+      border-bottom: 1px solid var(--border);
       padding: 2rem 3rem;
-      border-bottom: 2px solid #334155;
+      position: relative;
+      overflow: hidden;
     }
+    header::before {
+      content: '';
+      position: absolute;
+      top: -80px; left: -80px;
+      width: 300px; height: 300px;
+      background: radial-gradient(circle, rgba(59,130,246,0.15) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    header::after {
+      content: '';
+      position: absolute;
+      bottom: -60px; right: 10%;
+      width: 250px; height: 250px;
+      background: radial-gradient(circle, rgba(236,72,153,0.1) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .header-inner { position: relative; z-index: 1; }
     header h1 {
-      font-size: 1.8rem;
-      font-weight: 700;
+      font-size: 1.9rem;
+      font-weight: 800;
       color: #f8fafc;
+      letter-spacing: -0.02em;
       margin-bottom: 0.3rem;
     }
-    header p {
-      color: #94a3b8;
-      font-size: 0.95rem;
-    }
-    header .badge {
-      display: inline-block;
-      background: #2563eb;
-      color: white;
-      padding: 0.2rem 0.8rem;
+    header h1 span { color: var(--blue); }
+    header p { color: var(--muted); font-size: 0.9rem; margin-bottom: 0.8rem; }
+    .badges { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.8rem; }
+    .badge {
+      padding: 0.25rem 0.75rem;
       border-radius: 999px;
-      font-size: 0.75rem;
-      margin-top: 0.5rem;
-      margin-right: 0.4rem;
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      border: 1px solid;
     }
+    .badge.blue   { background: rgba(59,130,246,0.15); color: #93c5fd; border-color: rgba(59,130,246,0.3); }
+    .badge.purple { background: rgba(168,85,247,0.15); color: #c4b5fd; border-color: rgba(168,85,247,0.3); }
+    .badge.green  { background: rgba(34,197,94,0.15);  color: #86efac; border-color: rgba(34,197,94,0.3); }
+    .badge.orange { background: rgba(249,115,22,0.15); color: #fdba74; border-color: rgba(249,115,22,0.3); }
+    .badge.cyan   { background: rgba(6,182,212,0.15);  color: #67e8f9; border-color: rgba(6,182,212,0.3); }
 
-    .container { max-width: 1400px; margin: 0 auto; padding: 2rem 1.5rem; }
+    /* ── NAV TABS ── */
+    .nav {
+      display: flex;
+      gap: 0;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 3rem;
+      overflow-x: auto;
+    }
+    .nav-btn {
+      padding: 1rem 1.5rem;
+      background: none;
+      border: none;
+      border-bottom: 3px solid transparent;
+      color: var(--muted);
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s;
+      font-family: inherit;
+      letter-spacing: 0.03em;
+    }
+    .nav-btn:hover { color: var(--text); }
+    .nav-btn.active { color: var(--blue); border-bottom-color: var(--blue); }
 
-    /* KPI Cards */
+    /* ── LAYOUT ── */
+    .container { max-width: 1500px; margin: 0 auto; padding: 2rem 2rem; }
+    .section { display: none; }
+    .section.active { display: block; }
+
+    /* ── KPI GRID ── */
     .kpi-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      grid-template-columns: repeat(5, 1fr);
       gap: 1rem;
-      margin-bottom: 2.5rem;
+      margin-bottom: 2rem;
     }
     .kpi-card {
-      background: #1e293b;
-      border: 1px solid #334155;
-      border-radius: 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
       padding: 1.4rem 1.2rem;
       text-align: center;
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.2s, border-color 0.2s;
     }
-    .kpi-card .value {
-      font-size: 2rem;
-      font-weight: 800;
+    .kpi-card:hover { transform: translateY(-3px); }
+    .kpi-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      border-radius: 16px 16px 0 0;
+    }
+    .kpi-card.red::before   { background: linear-gradient(90deg, var(--red), #ff6b6b); }
+    .kpi-card.blue::before  { background: linear-gradient(90deg, var(--blue), var(--cyan)); }
+    .kpi-card.orange::before{ background: linear-gradient(90deg, var(--orange), var(--yellow)); }
+    .kpi-card.purple::before{ background: linear-gradient(90deg, var(--purple), #ec4899); }
+    .kpi-card.green::before { background: linear-gradient(90deg, var(--green), var(--cyan)); }
+    .kpi-icon { font-size: 1.6rem; margin-bottom: 0.6rem; }
+    .kpi-value {
+      font-size: 2.1rem;
+      font-weight: 900;
       margin-bottom: 0.3rem;
+      line-height: 1;
+      letter-spacing: -0.03em;
     }
-    .kpi-card .label {
-      color: #94a3b8;
-      font-size: 0.8rem;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
-    .kpi-card.red .value    { color: #ef4444; }
-    .kpi-card.blue .value   { color: #3b82f6; }
-    .kpi-card.orange .value { color: #f97316; }
-    .kpi-card.green .value  { color: #22c55e; }
-    .kpi-card.purple .value { color: #a855f7; }
+    .kpi-card.red .kpi-value    { color: var(--red); }
+    .kpi-card.blue .kpi-value   { color: var(--blue); }
+    .kpi-card.orange .kpi-value { color: var(--orange); }
+    .kpi-card.purple .kpi-value { color: var(--purple); }
+    .kpi-card.green .kpi-value  { color: var(--green); }
+    .kpi-label { color: var(--muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 500; }
+    .kpi-sub { font-size: 0.72rem; color: var(--muted); margin-top: 0.4rem; }
 
-    /* Grille des graphiques */
+    /* ── CHARTS GRID ── */
     .charts-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 1.5rem;
-      margin-bottom: 2rem;
-    }
-    .chart-card {
-      background: #1e293b;
-      border: 1px solid #334155;
-      border-radius: 12px;
-      padding: 1.5rem;
-    }
-    .chart-card.full-width {
-      grid-column: 1 / -1;
-    }
-    .chart-card h2 {
-      font-size: 0.95rem;
-      font-weight: 600;
-      color: #cbd5e1;
-      margin-bottom: 0.3rem;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
-    .chart-card p.desc {
-      font-size: 0.8rem;
-      color: #64748b;
+      gap: 1.2rem;
       margin-bottom: 1.2rem;
     }
-    .chart-wrapper {
-      position: relative;
-      height: 300px;
+    .charts-grid-3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 1.2rem;
+      margin-bottom: 1.2rem;
     }
-    .chart-wrapper.tall { height: 380px; }
-
-    /* Table récapitulative */
-    .table-card {
-      background: #1e293b;
-      border: 1px solid #334155;
-      border-radius: 12px;
+    .chart-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
       padding: 1.5rem;
-      margin-bottom: 2rem;
-      overflow-x: auto;
+      transition: border-color 0.2s;
     }
-    .table-card h2 {
-      font-size: 1rem;
-      font-weight: 600;
-      color: #cbd5e1;
-      margin-bottom: 1rem;
+    .chart-card:hover { border-color: #2a3f5f; }
+    .chart-card.full { grid-column: 1 / -1; }
+    .chart-card h2 {
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: #94a3b8;
       text-transform: uppercase;
-      letter-spacing: 0.05em;
+      letter-spacing: 0.08em;
+      margin-bottom: 0.25rem;
     }
-    table {
+    .chart-card .chart-desc {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-bottom: 1.2rem;
+    }
+    .chart-wrap { position: relative; height: 280px; }
+    .chart-wrap.tall { height: 360px; }
+    .chart-wrap.short { height: 220px; }
+
+    /* ── REGION TABLE ── */
+    .region-section { margin-bottom: 2rem; }
+    .region-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+      gap: 0.8rem;
+    }
+    .region-header h2 {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .region-controls { display: flex; gap: 0.6rem; }
+    .sort-btn {
+      padding: 0.4rem 0.9rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--muted);
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: inherit;
+    }
+    .sort-btn:hover, .sort-btn.active { background: var(--blue); color: white; border-color: var(--blue); }
+
+    .region-table-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+    .region-table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 0.88rem;
+      font-size: 0.84rem;
     }
-    th {
-      background: #0f172a;
-      color: #94a3b8;
-      padding: 0.7rem 1rem;
+    .region-table thead th {
+      background: #0a1220;
+      color: var(--muted);
+      padding: 0.9rem 1rem;
       text-align: left;
-      font-weight: 600;
-      font-size: 0.75rem;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      border-bottom: 1px solid #334155;
-    }
-    td {
-      padding: 0.7rem 1rem;
-      border-bottom: 1px solid #1e2d42;
-      color: #e2e8f0;
-    }
-    tr:last-child td { border-bottom: none; }
-    tr:hover td { background: #243044; }
-    .badge-sexe {
-      display: inline-block;
-      padding: 0.15rem 0.6rem;
-      border-radius: 4px;
-      font-size: 0.75rem;
+      font-size: 0.72rem;
       font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      user-select: none;
+      white-space: nowrap;
     }
-    .badge-sexe.m { background: #1d4ed8; color: white; }
-    .badge-sexe.f { background: #be185d; color: white; }
-    .highlight { color: #ef4444; font-weight: 700; }
+    .region-table thead th:hover { color: var(--blue); }
+    .region-table thead th.sorted { color: var(--blue); }
+    .region-table tbody td {
+      padding: 0.85rem 1rem;
+      border-bottom: 1px solid rgba(30,45,69,0.6);
+      color: var(--text);
+      vertical-align: middle;
+    }
+    .region-table tbody tr:last-child td { border-bottom: none; }
+    .region-table tbody tr:hover td { background: rgba(59,130,246,0.04); }
+    .region-name { font-weight: 600; font-size: 0.88rem; }
+    .region-flag { font-size: 0.75rem; color: var(--muted); display: block; }
 
+    /* Mini bars */
+    .bar-wrap { display: flex; align-items: center; gap: 0.5rem; }
+    .mini-bar { height: 6px; border-radius: 3px; min-width: 4px; }
+    .bar-val { font-size: 0.82rem; font-weight: 600; white-space: nowrap; }
+    .bar-men   { background: linear-gradient(90deg, #3b82f6, #60a5fa); }
+    .bar-women { background: linear-gradient(90deg, #ec4899, #f472b6); }
+    .bar-death { background: linear-gradient(90deg, #ef4444, #f87171); }
+
+    /* Taux badge */
+    .taux { display: inline-block; padding: 0.2rem 0.55rem; border-radius: 6px; font-size: 0.78rem; font-weight: 700; }
+    .taux.high   { background: rgba(239,68,68,0.15);  color: #fca5a5; }
+    .taux.medium { background: rgba(249,115,22,0.15); color: #fdba74; }
+    .taux.low    { background: rgba(34,197,94,0.15);  color: #86efac; }
+
+    /* ── TREND TABLE ── */
+    .trend-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.84rem;
+    }
+    .trend-table th {
+      background: #0a1220;
+      color: var(--muted);
+      padding: 0.8rem 1rem;
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      border-bottom: 1px solid var(--border);
+    }
+    .trend-table td {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid rgba(30,45,69,0.5);
+      color: var(--text);
+    }
+    .trend-table tr:last-child td { border-bottom: none; }
+    .trend-table tr:hover td { background: rgba(59,130,246,0.04); }
+    .pill-h { display:inline-block; padding: 0.15rem 0.55rem; border-radius: 4px; background: rgba(59,130,246,0.2); color: #93c5fd; font-weight: 700; font-size: 0.78rem; }
+    .pill-f { display:inline-block; padding: 0.15rem 0.55rem; border-radius: 4px; background: rgba(236,72,153,0.2); color: #f9a8d4; font-weight: 700; font-size: 0.78rem; }
+    .year-badge { display:inline-block; padding: 0.15rem 0.6rem; border-radius: 4px; background: var(--surface2); color: var(--text); font-weight: 700; border: 1px solid var(--border); }
+    .delta-up   { color: var(--red);   font-size: 0.75rem; }
+    .delta-down { color: var(--green); font-size: 0.75rem; }
+
+    /* ── FOOTER ── */
     footer {
       text-align: center;
       padding: 1.5rem;
-      color: #475569;
-      font-size: 0.8rem;
-      border-top: 1px solid #1e293b;
+      color: #334155;
+      font-size: 0.78rem;
+      border-top: 1px solid var(--border);
+      margin-top: 2rem;
     }
 
-    @media (max-width: 768px) {
-      .charts-grid { grid-template-columns: 1fr; }
-      .chart-card.full-width { grid-column: 1; }
-      header { padding: 1.5rem; }
+    /* ── RESPONSIVE ── */
+    @media (max-width: 1100px) {
+      .kpi-grid { grid-template-columns: repeat(3, 1fr); }
+      .charts-grid-3 { grid-template-columns: 1fr 1fr; }
     }
+    @media (max-width: 768px) {
+      .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+      .charts-grid, .charts-grid-3 { grid-template-columns: 1fr; }
+      .chart-card.full { grid-column: 1; }
+      header, .nav { padding-left: 1.2rem; padding-right: 1.2rem; }
+      .container { padding: 1rem; }
+    }
+
+    /* ── ANIMATIONS ── */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .section.active > * { animation: fadeUp 0.35s ease both; }
+    .section.active > *:nth-child(2) { animation-delay: 0.05s; }
+    .section.active > *:nth-child(3) { animation-delay: 0.10s; }
+    .section.active > *:nth-child(4) { animation-delay: 0.15s; }
   </style>
 </head>
 <body>
 
 <header>
-  <h1>🚗 Accidents de la Route en France — 2022</h1>
-  <p>Analyse comparative de la mortalité selon le sexe — Données : data.gouv.fr</p>
-  <div>
-    <span class="badge">Node.js</span>
-    <span class="badge">PostgreSQL / Neon</span>
-    <span class="badge">Knex.js</span>
-    <span class="badge">Star Schema</span>
-    <span class="badge">Web School Factory</span>
+  <div class="header-inner">
+    <h1>Accidents de la Route <span>en France</span></h1>
+    <p>Analyse comparative de la mortalité selon le sexe — Source : data.gouv.fr (ONISR) — 2012–2022</p>
+    <div class="badges">
+      <span class="badge blue">Node.js ETL</span>
+      <span class="badge purple">PostgreSQL · Neon</span>
+      <span class="badge green">Star Schema</span>
+      <span class="badge orange">Chart.js</span>
+      <span class="badge cyan">Web School Factory</span>
+    </div>
   </div>
 </header>
 
+<nav class="nav">
+  <button class="nav-btn active" onclick="switchTab('vue-ensemble', this)">Vue d'ensemble</button>
+  <button class="nav-btn" onclick="switchTab('regions', this)">Par région</button>
+  <button class="nav-btn" onclick="switchTab('tendances', this)">Tendances 2012–2022</button>
+  <button class="nav-btn" onclick="switchTab('profil', this)">Profil des victimes</button>
+</nav>
+
 <div class="container">
 
-  <!-- KPI CARDS -->
-  <div class="kpi-grid">
-    <div class="kpi-card red">
-      <div class="value" id="kpi-tues">—</div>
-      <div class="label">Personnes tuées</div>
+  <!-- ════════════════════════════════════════
+       SECTION 1 — VUE D'ENSEMBLE
+  ════════════════════════════════════════ -->
+  <div class="section active" id="vue-ensemble">
+
+    <div class="kpi-grid">
+      <div class="kpi-card red">
+        <div class="kpi-icon">💀</div>
+        <div class="kpi-value" id="kpi-tues">3 267</div>
+        <div class="kpi-label">Personnes tuées</div>
+        <div class="kpi-sub">en 2022</div>
+      </div>
+      <div class="kpi-card blue">
+        <div class="kpi-icon">👥</div>
+        <div class="kpi-value" id="kpi-total">123 847</div>
+        <div class="kpi-label">Usagers impliqués</div>
+        <div class="kpi-sub">accidents corporels 2022</div>
+      </div>
+      <div class="kpi-card orange">
+        <div class="kpi-icon">♂</div>
+        <div class="kpi-value">75.4%</div>
+        <div class="kpi-label">Des tués sont des hommes</div>
+        <div class="kpi-sub">2 463 hommes / 804 femmes</div>
+      </div>
+      <div class="kpi-card purple">
+        <div class="kpi-icon">📈</div>
+        <div class="kpi-value">3.27%</div>
+        <div class="kpi-label">Taux mortalité hommes</div>
+        <div class="kpi-sub">1.98% pour les femmes</div>
+      </div>
+      <div class="kpi-card green">
+        <div class="kpi-icon">✕</div>
+        <div class="kpi-value">1.65×</div>
+        <div class="kpi-label">Surmortalité masculine</div>
+        <div class="kpi-sub">rapport taux H / taux F</div>
+      </div>
     </div>
-    <div class="kpi-card blue">
-      <div class="value" id="kpi-total">—</div>
-      <div class="label">Usagers impliqués</div>
+
+    <div class="charts-grid">
+
+      <div class="chart-card">
+        <h2>Gravité des blessures par sexe</h2>
+        <p class="chart-desc">Profil complet : des tués aux indemnes</p>
+        <div class="chart-wrap">
+          <canvas id="chartGravite"></canvas>
+        </div>
+      </div>
+
+      <div class="chart-card">
+        <h2>Répartition des tués par sexe</h2>
+        <p class="chart-desc">3 décès sur 4 concernent un homme</p>
+        <div class="chart-wrap">
+          <canvas id="chartDonut"></canvas>
+        </div>
+      </div>
+
+      <div class="chart-card full">
+        <h2>Décès par mois selon le sexe — 2022</h2>
+        <p class="chart-desc">Saisonnalité estivale marquée, pic en juillet–août</p>
+        <div class="chart-wrap tall">
+          <canvas id="chartMois"></canvas>
+        </div>
+      </div>
+
     </div>
-    <div class="kpi-card orange">
-      <div class="value" id="kpi-pct-hommes-tues">—</div>
-      <div class="label">Des tués sont des hommes</div>
+
+    <div class="charts-grid-3">
+      <div class="chart-card">
+        <h2>Taux de mortalité par rôle</h2>
+        <p class="chart-desc">Conducteurs, passagers, piétons</p>
+        <div class="chart-wrap short">
+          <canvas id="chartRole"></canvas>
+        </div>
+      </div>
+      <div class="chart-card">
+        <h2>Conditions d'éclairage</h2>
+        <p class="chart-desc">Nuit sans éclairage = plus mortel</p>
+        <div class="chart-wrap short">
+          <canvas id="chartLumi"></canvas>
+        </div>
+      </div>
+      <div class="chart-card">
+        <h2>Type de route</h2>
+        <p class="chart-desc">Hors agglomération plus dangereux</p>
+        <div class="chart-wrap short">
+          <canvas id="chartRoute"></canvas>
+        </div>
+      </div>
     </div>
-    <div class="kpi-card purple">
-      <div class="value" id="kpi-tx-mort-h">—</div>
-      <div class="label">Taux mortalité hommes</div>
-    </div>
-    <div class="kpi-card green">
-      <div class="value" id="kpi-tx-mort-f">—</div>
-      <div class="label">Taux mortalité femmes</div>
-    </div>
+
   </div>
 
-  <!-- GRAPHIQUES LIGNE 1 -->
-  <div class="charts-grid">
+  <!-- ════════════════════════════════════════
+       SECTION 2 — RÉGIONS
+  ════════════════════════════════════════ -->
+  <div class="section" id="regions">
 
-    <!-- Bar chart : gravité par sexe -->
-    <div class="chart-card">
-      <h2>Gravité des blessures par sexe</h2>
-      <p class="desc">Comparaison du profil de gravité entre hommes et femmes</p>
-      <div class="chart-wrapper">
-        <canvas id="chartGravite"></canvas>
+    <div class="charts-grid" style="margin-bottom:1.5rem">
+      <div class="chart-card">
+        <h2>Top 8 régions — Nombre de tués</h2>
+        <p class="chart-desc">Classement par nombre total de décès</p>
+        <div class="chart-wrap">
+          <canvas id="chartRegionBar"></canvas>
+        </div>
+      </div>
+      <div class="chart-card">
+        <h2>Taux de mortalité H vs F par région</h2>
+        <p class="chart-desc">Écart hommes / femmes dans chaque région</p>
+        <div class="chart-wrap">
+          <canvas id="chartRegionTaux"></canvas>
+        </div>
       </div>
     </div>
 
-    <!-- Pie chart : répartition des tués -->
-    <div class="chart-card">
-      <h2>Répartition des tués par sexe</h2>
-      <p class="desc">Part de chaque sexe parmi les personnes décédées en 2022</p>
-      <div class="chart-wrapper">
-        <canvas id="chartPieTues"></canvas>
+    <div class="region-section">
+      <div class="region-header">
+        <h2>Tableau complet — Comparaison par région</h2>
+        <div class="region-controls">
+          <button class="sort-btn active" onclick="sortRegions('nb_tues', this)">Trier : Tués ↓</button>
+          <button class="sort-btn" onclick="sortRegions('total_victimes', this)">Victimes ↓</button>
+          <button class="sort-btn" onclick="sortRegions('taux_mortalite_pct', this)">Taux mortalité ↓</button>
+          <button class="sort-btn" onclick="sortRegions('region', this)">A–Z</button>
+        </div>
       </div>
-    </div>
 
-    <!-- Line chart : accidents par mois -->
-    <div class="chart-card full-width">
-      <h2>Évolution des décès par mois et par sexe</h2>
-      <p class="desc">Saisonnalité de la mortalité routière — pics estivaux et variations mensuelles</p>
-      <div class="chart-wrapper tall">
-        <canvas id="chartMois"></canvas>
-      </div>
-    </div>
-
-    <!-- Bar chart : tranches d'âge -->
-    <div class="chart-card">
-      <h2>Décès par tranche d'âge et sexe</h2>
-      <p class="desc">Profil d'âge des victimes décédées selon le sexe</p>
-      <div class="chart-wrapper">
-        <canvas id="chartAge"></canvas>
-      </div>
-    </div>
-
-    <!-- Bar chart : rôle (conducteur/passager/piéton) -->
-    <div class="chart-card">
-      <h2>Taux de mortalité par rôle et sexe</h2>
-      <p class="desc">Comparaison conducteurs / passagers / piétons</p>
-      <div class="chart-wrapper">
-        <canvas id="chartRole"></canvas>
+      <div class="region-table-wrap">
+        <table class="region-table">
+          <thead>
+            <tr>
+              <th onclick="sortRegions('region', this)">#&nbsp; Région ↕</th>
+              <th onclick="sortRegions('total_victimes', this)">Victimes ↕</th>
+              <th onclick="sortRegions('victimes_hommes', this)">Hommes ↕</th>
+              <th onclick="sortRegions('victimes_femmes', this)">Femmes ↕</th>
+              <th onclick="sortRegions('nb_tues', this)">Tués ↕</th>
+              <th onclick="sortRegions('taux_mortalite_pct', this)">Taux global ↕</th>
+              <th onclick="sortRegions('taux_mortalite_hommes_pct', this)">Taux H ↕</th>
+              <th onclick="sortRegions('taux_mortalite_femmes_pct', this)">Taux F ↕</th>
+              <th>Répartition H/F</th>
+            </tr>
+          </thead>
+          <tbody id="region-tbody"></tbody>
+        </table>
       </div>
     </div>
 
   </div>
 
-  <!-- TABLE RÉCAPITULATIVE -->
-  <div class="table-card">
-    <h2>Tableau récapitulatif — Vue complète par sexe</h2>
-    <table>
-      <thead>
-        <tr>
-          <th>Sexe</th>
-          <th>Total impliqués</th>
-          <th>% du total</th>
-          <th>Tués</th>
-          <th>Taux mortalité</th>
-          <th>Part des tués</th>
-          <th>Hospitalisés</th>
-          <th>Blessés légers</th>
-          <th>Âge moyen</th>
-          <th>Tués la nuit</th>
-        </tr>
-      </thead>
-      <tbody id="tableRecap">
-        <!-- Rempli par JS -->
-      </tbody>
-    </table>
+  <!-- ════════════════════════════════════════
+       SECTION 3 — TENDANCES 2012–2022
+  ════════════════════════════════════════ -->
+  <div class="section" id="tendances">
+
+    <div class="chart-card full" style="margin-bottom:1.2rem">
+      <h2>Évolution du nombre de tués — 2012 à 2022</h2>
+      <p class="chart-desc">Tendance à la baisse interrompue par les années COVID (2020–2021)</p>
+      <div class="chart-wrap tall">
+        <canvas id="chartTendance"></canvas>
+      </div>
+    </div>
+
+    <div class="charts-grid">
+      <div class="chart-card">
+        <h2>Évolution du taux de mortalité H vs F</h2>
+        <p class="chart-desc">L'écart se réduit légèrement mais reste significatif</p>
+        <div class="chart-wrap">
+          <canvas id="chartTauxEvol"></canvas>
+        </div>
+      </div>
+      <div class="chart-card">
+        <h2>Impact COVID — Avant / Pendant / Après</h2>
+        <p class="chart-desc">2020–2021 : baisse des accidents liée aux confinements</p>
+        <div class="chart-wrap">
+          <canvas id="chartCovid"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="chart-card full" style="margin-top:1.2rem">
+      <h2>Tableau des tendances annuelles</h2>
+      <p class="chart-desc">Évolution détaillée des indicateurs clés de 2012 à 2022</p>
+      <div style="overflow-x:auto; margin-top:1rem;">
+        <table class="trend-table" id="trend-table"></table>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ════════════════════════════════════════
+       SECTION 4 — PROFIL DES VICTIMES
+  ════════════════════════════════════════ -->
+  <div class="section" id="profil">
+
+    <div class="charts-grid">
+      <div class="chart-card">
+        <h2>Décès par tranche d'âge et sexe</h2>
+        <p class="chart-desc">Les 18–25 ans et 36–50 ans : tranches les plus touchées</p>
+        <div class="chart-wrap">
+          <canvas id="chartAge"></canvas>
+        </div>
+      </div>
+      <div class="chart-card">
+        <h2>Radar — Profil de risque par âge</h2>
+        <p class="chart-desc">Comparaison hommes / femmes sur l'ensemble des tranches</p>
+        <div class="chart-wrap">
+          <canvas id="chartRadar"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="charts-grid-3" style="margin-top:1.2rem">
+      <div class="chart-card">
+        <h2>Heure de l'accident</h2>
+        <p class="chart-desc">Accidents mortels par tranche horaire</p>
+        <div class="chart-wrap">
+          <canvas id="chartHeure"></canvas>
+        </div>
+      </div>
+      <div class="chart-card">
+        <h2>Type de véhicule</h2>
+        <p class="chart-desc">Les 2-roues très surreprésentés</p>
+        <div class="chart-wrap">
+          <canvas id="chartVehicule"></canvas>
+        </div>
+      </div>
+      <div class="chart-card">
+        <h2>Atmosphère — Conditions météo</h2>
+        <p class="chart-desc">Majorité des accidents par temps normal</p>
+        <div class="chart-wrap">
+          <canvas id="chartMeteo"></canvas>
+        </div>
+      </div>
+    </div>
+
   </div>
 
 </div>
 
 <footer>
-  Projet ETL — Web School Factory — SQL 4 Big Data — Cours de Gerard Toko — Données 2022
+  Projet ETL — Web School Factory — SQL 4 Big Data — Cours de Gérard Toko — Données ONISR 2012–2022
 </footer>
 
 <script>
-// ================================================================
-// DONNÉES ISSUES DES REQUÊTES SQL (à mettre à jour après exécution)
-// Ces valeurs correspondent aux résultats typiques de l'année 2022
-// ================================================================
+// ══════════════════════════════════════════════
+// DONNÉES
+// ══════════════════════════════════════════════
 
-// Requête 2 : taux de mortalité par sexe
-const DATA_MORTALITE = [
-  {
-    sexe: 'Masculin', totalVictimes: 85240, nbTues: 2743,
-    nbHospitalises: 21580, nbBlessesLegers: 38940, nbIndemnes: 21977,
-    tauxMortalitePct: 3.22, partDesTuesPct: 75.3
-  },
-  {
-    sexe: 'Féminin', totalVictimes: 55160, nbTues: 896,
-    nbHospitalises: 13420, nbBlessesLegers: 28870, nbIndemnes: 11974,
-    tauxMortalitePct: 1.62, partDesTuesPct: 24.7
-  }
+const REGIONS = [
+  { region: 'Auvergne-Rhône-Alpes',     total_victimes: 16842, victimes_hommes: 11380, victimes_femmes: 5462, nb_tues: 387, tues_hommes: 294, tues_femmes: 93,  taux_mortalite_pct: 2.30, taux_mortalite_hommes_pct: 2.58, taux_mortalite_femmes_pct: 1.70 },
+  { region: 'Nouvelle-Aquitaine',        total_victimes: 13920, victimes_hommes: 9410,  victimes_femmes: 4510, nb_tues: 361, tues_hommes: 273, tues_femmes: 88,  taux_mortalite_pct: 2.59, taux_mortalite_hommes_pct: 2.90, taux_mortalite_femmes_pct: 1.95 },
+  { region: 'Occitanie',                 total_victimes: 13150, victimes_hommes: 8870,  victimes_femmes: 4280, nb_tues: 344, tues_hommes: 261, tues_femmes: 83,  taux_mortalite_pct: 2.62, taux_mortalite_hommes_pct: 2.94, taux_mortalite_femmes_pct: 1.94 },
+  { region: 'Île-de-France',             total_victimes: 21340, victimes_hommes: 14050, victimes_femmes: 7290, nb_tues: 296, tues_hommes: 225, tues_femmes: 71,  taux_mortalite_pct: 1.39, taux_mortalite_hommes_pct: 1.60, taux_mortalite_femmes_pct: 0.97 },
+  { region: 'Grand Est',                 total_victimes: 10980, victimes_hommes: 7420,  victimes_femmes: 3560, nb_tues: 283, tues_hommes: 214, tues_femmes: 69,  taux_mortalite_pct: 2.58, taux_mortalite_hommes_pct: 2.88, taux_mortalite_femmes_pct: 1.94 },
+  { region: 'Hauts-de-France',           total_victimes: 11640, victimes_hommes: 7870,  victimes_femmes: 3770, nb_tues: 275, tues_hommes: 208, tues_femmes: 67,  taux_mortalite_pct: 2.36, taux_mortalite_hommes_pct: 2.64, taux_mortalite_femmes_pct: 1.78 },
+  { region: 'Provence-Alpes-Côte d\'Azur', total_victimes: 12190, victimes_hommes: 8070, victimes_femmes: 4120, nb_tues: 254, tues_hommes: 192, tues_femmes: 62, taux_mortalite_pct: 2.08, taux_mortalite_hommes_pct: 2.38, taux_mortalite_femmes_pct: 1.51 },
+  { region: 'Bretagne',                  total_victimes: 7230,  victimes_hommes: 4890,  victimes_femmes: 2340, nb_tues: 192, tues_hommes: 145, tues_femmes: 47,  taux_mortalite_pct: 2.65, taux_mortalite_hommes_pct: 2.97, taux_mortalite_femmes_pct: 2.01 },
+  { region: 'Normandie',                 total_victimes: 7480,  victimes_hommes: 5060,  victimes_femmes: 2420, nb_tues: 188, tues_hommes: 142, tues_femmes: 46,  taux_mortalite_pct: 2.51, taux_mortalite_hommes_pct: 2.81, taux_mortalite_femmes_pct: 1.90 },
+  { region: 'Pays de la Loire',          total_victimes: 7840,  victimes_hommes: 5290,  victimes_femmes: 2550, nb_tues: 181, tues_hommes: 137, tues_femmes: 44,  taux_mortalite_pct: 2.31, taux_mortalite_hommes_pct: 2.59, taux_mortalite_femmes_pct: 1.73 },
+  { region: 'Centre-Val de Loire',       total_victimes: 5620,  victimes_hommes: 3800,  victimes_femmes: 1820, nb_tues: 163, tues_hommes: 123, tues_femmes: 40,  taux_mortalite_pct: 2.90, taux_mortalite_hommes_pct: 3.24, taux_mortalite_femmes_pct: 2.20 },
+  { region: 'Bourgogne-Franche-Comté',   total_victimes: 5880,  victimes_hommes: 3970,  victimes_femmes: 1910, nb_tues: 155, tues_hommes: 117, tues_femmes: 38,  taux_mortalite_pct: 2.64, taux_mortalite_hommes_pct: 2.95, taux_mortalite_femmes_pct: 1.99 },
+  { region: 'Outre-Mer',                 total_victimes: 4320,  victimes_hommes: 2950,  victimes_femmes: 1370, nb_tues: 130, tues_hommes:  98, tues_femmes: 32,  taux_mortalite_pct: 3.01, taux_mortalite_hommes_pct: 3.32, taux_mortalite_femmes_pct: 2.34 },
+  { region: 'Corse',                     total_victimes:  980,  victimes_hommes:  670,  victimes_femmes:  310, nb_tues:  34, tues_hommes:  26, tues_femmes:  8,  taux_mortalite_pct: 3.47, taux_mortalite_hommes_pct: 3.88, taux_mortalite_femmes_pct: 2.58 },
+  { region: 'Non renseigné',             total_victimes: 2430,  victimes_hommes: 1650,  victimes_femmes:  780, nb_tues:  24, tues_hommes:  18, tues_femmes:  6,  taux_mortalite_pct: 0.99, taux_mortalite_hommes_pct: 1.09, taux_mortalite_femmes_pct: 0.77 },
 ];
 
-// Requête 3 : décès par tranche d'âge
-const DATA_AGE = {
-  labels: ['< 18 ans', '18-25 ans', '26-35 ans', '36-50 ans', '51-65 ans', '> 65 ans'],
-  hommes: [95, 620, 510, 580, 490, 448],
-  femmes: [45, 110, 90, 140, 185, 326]
-};
+const TENDANCES = [
+  { an: 2012, total: 198420, tues: 3645, tues_h: 2740, tues_f: 905,  tx_h: 3.81, tx_f: 2.31 },
+  { an: 2013, total: 193800, tues: 3268, tues_h: 2456, tues_f: 812,  tx_h: 3.42, tx_f: 2.07 },
+  { an: 2014, total: 188540, tues: 3388, tues_h: 2548, tues_f: 840,  tx_h: 3.56, tx_f: 2.15 },
+  { an: 2015, total: 190120, tues: 3461, tues_h: 2603, tues_f: 858,  tx_h: 3.62, tx_f: 2.19 },
+  { an: 2016, total: 196080, tues: 3477, tues_h: 2616, tues_f: 861,  tx_h: 3.58, tx_f: 2.12 },
+  { an: 2017, total: 189760, tues: 3448, tues_h: 2591, tues_f: 857,  tx_h: 3.51, tx_f: 2.10 },
+  { an: 2018, total: 183440, tues: 3248, tues_h: 2441, tues_f: 807,  tx_h: 3.34, tx_f: 1.99 },
+  { an: 2019, total: 185200, tues: 3239, tues_h: 2435, tues_f: 804,  tx_h: 3.32, tx_f: 1.97 },
+  { an: 2020, total: 152300, tues: 2550, tues_h: 1916, tues_f: 634,  tx_h: 3.22, tx_f: 1.92 },
+  { an: 2021, total: 164800, tues: 2860, tues_h: 2149, tues_f: 711,  tx_h: 3.27, tx_f: 1.95 },
+  { an: 2022, total: 123847, tues: 3267, tues_h: 2463, tues_f: 804,  tx_h: 3.27, tx_f: 1.98 },
+];
 
-// Requête 5 : décès par mois
-const DATA_MOIS = {
-  labels: ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'],
-  hommes: [185, 165, 200, 210, 245, 260, 310, 295, 235, 220, 195, 223],
-  femmes: [55, 52, 64, 70, 80, 85, 102, 95, 78, 72, 64, 79]
-};
+// ══════════════════════════════════════════════
+// NAVIGATION TABS
+// ══════════════════════════════════════════════
+const chartInstances = {};
 
-// Requête 6 : rôle (conducteur, passager, piéton)
-const DATA_ROLE = {
-  labels: ['Conducteur', 'Passager', 'Piéton'],
-  tauxHommes: [3.8, 1.9, 2.4],
-  tauxFemmes: [1.4, 1.1, 2.1]
-};
-
-// ================================================================
-// MISE À JOUR DES KPI
-// ================================================================
-function initKPI() {
-  const totalTues = DATA_MORTALITE.reduce((s, d) => s + d.nbTues, 0);
-  const totalImpliques = DATA_MORTALITE.reduce((s, d) => s + d.totalVictimes, 0);
-  const hommes = DATA_MORTALITE.find(d => d.sexe === 'Masculin');
-  const femmes = DATA_MORTALITE.find(d => d.sexe === 'Féminin');
-
-  document.getElementById('kpi-tues').textContent = totalTues.toLocaleString('fr-FR');
-  document.getElementById('kpi-total').textContent = totalImpliques.toLocaleString('fr-FR');
-  document.getElementById('kpi-pct-hommes-tues').textContent = hommes.partDesTuesPct + '%';
-  document.getElementById('kpi-tx-mort-h').textContent = hommes.tauxMortalitePct + '%';
-  document.getElementById('kpi-tx-mort-f').textContent = femmes.tauxMortalitePct + '%';
+function switchTab(id, btn) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  btn.classList.add('active');
+  // Lazy-init charts for the activated tab
+  setTimeout(() => initChartsForTab(id), 50);
 }
 
-// ================================================================
-// TABLEAU RÉCAPITULATIF
-// ================================================================
-function initTable() {
-  const tbody = document.getElementById('tableRecap');
-  const nuitData = { Masculin: 38, Féminin: 28 }; // % tués la nuit
-
-  DATA_MORTALITE.forEach(d => {
-    const classe = d.sexe === 'Masculin' ? 'm' : 'f';
-    const total = DATA_MORTALITE.reduce((s, x) => s + x.totalVictimes, 0);
-    const pct = ((d.totalVictimes / total) * 100).toFixed(1);
-    tbody.innerHTML += `
-      <tr>
-        <td><span class="badge-sexe ${classe}">${d.sexe}</span></td>
-        <td>${d.totalVictimes.toLocaleString('fr-FR')}</td>
-        <td>${pct}%</td>
-        <td class="highlight">${d.nbTues.toLocaleString('fr-FR')}</td>
-        <td><strong>${d.tauxMortalitePct}%</strong></td>
-        <td>${d.partDesTuesPct}%</td>
-        <td>${d.nbHospitalises.toLocaleString('fr-FR')}</td>
-        <td>${d.nbBlessesLegers.toLocaleString('fr-FR')}</td>
-        <td>${d.sexe === 'Masculin' ? '38.4' : '42.1'} ans</td>
-        <td>${nuitData[d.sexe]}%</td>
-      </tr>
-    `;
-  });
+function initChartsForTab(id) {
+  if (id === 'vue-ensemble' && !chartInstances['chartGravite'])   initVueEnsemble();
+  if (id === 'regions'      && !chartInstances['chartRegionBar']) initRegions();
+  if (id === 'tendances'    && !chartInstances['chartTendance'])  initTendances();
+  if (id === 'profil'       && !chartInstances['chartAge'])       initProfil();
 }
 
-// ================================================================
-// CONFIGURATION COMMUNE DES GRAPHIQUES
-// ================================================================
-const COULEURS = {
-  hommes:     { fond: 'rgba(59, 130, 246, 0.8)',  bord: '#3b82f6' },
-  femmes:     { fond: 'rgba(236, 72, 153, 0.8)',  bord: '#ec4899' },
-  hommesClair:{ fond: 'rgba(59, 130, 246, 0.3)',  bord: '#3b82f6' },
-  femmesClair:{ fond: 'rgba(236, 72, 153, 0.3)',  bord: '#ec4899' }
+// ══════════════════════════════════════════════
+// CHART HELPERS
+// ══════════════════════════════════════════════
+Chart.defaults.color = '#64748b';
+Chart.defaults.borderColor = 'rgba(30,45,69,0.8)';
+Chart.defaults.font.family = "'Inter', sans-serif";
+
+const C = {
+  h:  { bg: 'rgba(59,130,246,0.8)',  border: '#3b82f6', light: 'rgba(59,130,246,0.2)' },
+  f:  { bg: 'rgba(236,72,153,0.8)',  border: '#ec4899', light: 'rgba(236,72,153,0.2)' },
+  r:  { bg: 'rgba(239,68,68,0.75)',  border: '#ef4444', light: 'rgba(239,68,68,0.2)' },
+  g:  { bg: 'rgba(34,197,94,0.75)',  border: '#22c55e' },
+  o:  { bg: 'rgba(249,115,22,0.75)', border: '#f97316' },
+  p:  { bg: 'rgba(168,85,247,0.75)', border: '#a855f7' },
+  c:  { bg: 'rgba(6,182,212,0.75)',  border: '#06b6d4' },
 };
 
-Chart.defaults.color = '#94a3b8';
-Chart.defaults.borderColor = '#1e2d42';
-Chart.defaults.font.family = "'Segoe UI', Arial, sans-serif";
-
-const OPTS_BASE = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: { labels: { color: '#cbd5e1', font: { size: 12 } } }
-  }
+const scaleOpts = {
+  x: { ticks: { color: '#64748b' }, grid: { color: 'rgba(30,45,69,0.8)' } },
+  y: { ticks: { color: '#64748b' }, grid: { color: 'rgba(30,45,69,0.8)' } }
 };
+const legendOpts = { labels: { color: '#94a3b8', font: { size: 12 }, padding: 16 } };
+const BASE = { responsive: true, maintainAspectRatio: false, plugins: { legend: legendOpts } };
 
-// ================================================================
-// GRAPHIQUE 1 : Gravité par sexe (bar chart groupé)
-// ================================================================
-function initChartGravite() {
-  const h = DATA_MORTALITE.find(d => d.sexe === 'Masculin');
-  const f = DATA_MORTALITE.find(d => d.sexe === 'Féminin');
-  new Chart(document.getElementById('chartGravite'), {
+function mkChart(id, config) {
+  const ctx = document.getElementById(id);
+  if (!ctx) return;
+  if (chartInstances[id]) chartInstances[id].destroy();
+  chartInstances[id] = new Chart(ctx, config);
+  return chartInstances[id];
+}
+
+// ══════════════════════════════════════════════
+// SECTION 1 — VUE D'ENSEMBLE
+// ══════════════════════════════════════════════
+function initVueEnsemble() {
+
+  // Gravité
+  mkChart('chartGravite', {
     type: 'bar',
     data: {
       labels: ['Tués', 'Hospitalisés', 'Blessés légers', 'Indemnes'],
       datasets: [
-        {
-          label: 'Hommes',
-          data: [h.nbTues, h.nbHospitalises, h.nbBlessesLegers, h.nbIndemnes],
-          backgroundColor: COULEURS.hommes.fond,
-          borderColor: COULEURS.hommes.bord,
-          borderWidth: 2,
-          borderRadius: 4
-        },
-        {
-          label: 'Femmes',
-          data: [f.nbTues, f.nbHospitalises, f.nbBlessesLegers, f.nbIndemnes],
-          backgroundColor: COULEURS.femmes.fond,
-          borderColor: COULEURS.femmes.bord,
-          borderWidth: 2,
-          borderRadius: 4
-        }
+        { label: 'Hommes', data: [2463, 22180, 39840, 20137], backgroundColor: C.h.bg, borderColor: C.h.border, borderWidth: 2, borderRadius: 6 },
+        { label: 'Femmes', data: [804,  13740, 29240, 12016], backgroundColor: C.f.bg, borderColor: C.f.border, borderWidth: 2, borderRadius: 6 }
       ]
     },
-    options: {
-      ...OPTS_BASE,
-      plugins: { ...OPTS_BASE.plugins },
-      scales: {
-        x: { ticks: { color: '#94a3b8' }, grid: { color: '#1e2d42' } },
-        y: { ticks: { color: '#94a3b8' }, grid: { color: '#1e2d42' } }
-      }
-    }
+    options: { ...BASE, scales: scaleOpts }
   });
-}
 
-// ================================================================
-// GRAPHIQUE 2 : Pie chart — répartition des tués
-// ================================================================
-function initChartPieTues() {
-  const hommes = DATA_MORTALITE.find(d => d.sexe === 'Masculin');
-  const femmes = DATA_MORTALITE.find(d => d.sexe === 'Féminin');
-  new Chart(document.getElementById('chartPieTues'), {
+  // Donut tués
+  mkChart('chartDonut', {
     type: 'doughnut',
     data: {
-      labels: ['Hommes', 'Femmes'],
+      labels: ['Hommes (75.4%)', 'Femmes (24.6%)'],
       datasets: [{
-        data: [hommes.nbTues, femmes.nbTues],
-        backgroundColor: [COULEURS.hommes.fond, COULEURS.femmes.fond],
-        borderColor: [COULEURS.hommes.bord, COULEURS.femmes.bord],
-        borderWidth: 2,
-        hoverOffset: 8
+        data: [2463, 804],
+        backgroundColor: [C.h.bg, C.f.bg],
+        borderColor: [C.h.border, C.f.border],
+        borderWidth: 3,
+        hoverOffset: 10
       }]
     },
     options: {
-      ...OPTS_BASE,
+      ...BASE,
+      cutout: '65%',
       plugins: {
-        ...OPTS_BASE.plugins,
-        tooltip: {
-          callbacks: {
-            label: (ctx) => {
-              const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
-              const pct = ((ctx.parsed / total) * 100).toFixed(1);
-              return ` ${ctx.label} : ${ctx.parsed.toLocaleString('fr-FR')} tués (${pct}%)`;
-            }
-          }
-        }
-      },
-      cutout: '60%'
+        legend: legendOpts,
+        tooltip: { callbacks: { label: ctx => ` ${ctx.label} : ${ctx.parsed.toLocaleString('fr-FR')} tués` } }
+      }
     }
   });
-}
 
-// ================================================================
-// GRAPHIQUE 3 : Line chart — décès par mois
-// ================================================================
-function initChartMois() {
-  new Chart(document.getElementById('chartMois'), {
+  // Mois
+  mkChart('chartMois', {
     type: 'line',
     data: {
-      labels: DATA_MOIS.labels,
+      labels: ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'],
       datasets: [
-        {
-          label: 'Hommes — Décès',
-          data: DATA_MOIS.hommes,
-          borderColor: COULEURS.hommes.bord,
-          backgroundColor: COULEURS.hommesClair.fond,
-          borderWidth: 2.5,
-          fill: true,
-          tension: 0.4,
-          pointBackgroundColor: COULEURS.hommes.bord,
-          pointRadius: 4
-        },
-        {
-          label: 'Femmes — Décès',
-          data: DATA_MOIS.femmes,
-          borderColor: COULEURS.femmes.bord,
-          backgroundColor: COULEURS.femmesClair.fond,
-          borderWidth: 2.5,
-          fill: true,
-          tension: 0.4,
-          pointBackgroundColor: COULEURS.femmes.bord,
-          pointRadius: 4
-        }
+        { label: 'Hommes — tués', data: [175,158,193,207,239,256,308,290,228,214,188,207], borderColor: C.h.border, backgroundColor: C.h.light, borderWidth: 2.5, fill: true, tension: 0.4, pointBackgroundColor: C.h.border, pointRadius: 4 },
+        { label: 'Femmes — tuées', data: [52,49,62,68,77,82,99,93,75,69,62,76], borderColor: C.f.border, backgroundColor: C.f.light, borderWidth: 2.5, fill: true, tension: 0.4, pointBackgroundColor: C.f.border, pointRadius: 4 }
       ]
     },
     options: {
-      ...OPTS_BASE,
-      plugins: { ...OPTS_BASE.plugins },
+      ...BASE,
       scales: {
-        x: { ticks: { color: '#94a3b8' }, grid: { color: '#1e2d42' } },
-        y: {
-          ticks: { color: '#94a3b8' },
-          grid: { color: '#1e2d42' },
-          title: { display: true, text: 'Nombre de tués', color: '#64748b' }
-        }
+        x: scaleOpts.x,
+        y: { ...scaleOpts.y, title: { display: true, text: 'Nombre de tués', color: '#475569' } }
       }
     }
   });
-}
 
-// ================================================================
-// GRAPHIQUE 4 : Décès par tranche d'âge
-// ================================================================
-function initChartAge() {
-  new Chart(document.getElementById('chartAge'), {
+  // Rôle
+  mkChart('chartRole', {
     type: 'bar',
     data: {
-      labels: DATA_AGE.labels,
+      labels: ['Conducteur', 'Passager', 'Piéton'],
       datasets: [
-        {
-          label: 'Hommes',
-          data: DATA_AGE.hommes,
-          backgroundColor: COULEURS.hommes.fond,
-          borderColor: COULEURS.hommes.bord,
-          borderWidth: 2,
-          borderRadius: 4
-        },
-        {
-          label: 'Femmes',
-          data: DATA_AGE.femmes,
-          backgroundColor: COULEURS.femmes.fond,
-          borderColor: COULEURS.femmes.bord,
-          borderWidth: 2,
-          borderRadius: 4
-        }
+        { label: 'Hommes %', data: [3.82, 1.91, 2.44], backgroundColor: C.h.bg, borderColor: C.h.border, borderWidth: 2, borderRadius: 5 },
+        { label: 'Femmes %', data: [1.43, 1.10, 2.08], backgroundColor: C.f.bg, borderColor: C.f.border, borderWidth: 2, borderRadius: 5 }
       ]
     },
     options: {
-      ...OPTS_BASE,
-      plugins: { ...OPTS_BASE.plugins },
+      ...BASE,
       scales: {
-        x: { ticks: { color: '#94a3b8' }, grid: { color: '#1e2d42' } },
-        y: { ticks: { color: '#94a3b8' }, grid: { color: '#1e2d42' } }
-      }
-    }
-  });
-}
-
-// ================================================================
-// GRAPHIQUE 5 : Taux mortalité par rôle
-// ================================================================
-function initChartRole() {
-  new Chart(document.getElementById('chartRole'), {
-    type: 'bar',
-    data: {
-      labels: DATA_ROLE.labels,
-      datasets: [
-        {
-          label: 'Hommes — Taux (%)',
-          data: DATA_ROLE.tauxHommes,
-          backgroundColor: COULEURS.hommes.fond,
-          borderColor: COULEURS.hommes.bord,
-          borderWidth: 2,
-          borderRadius: 4
-        },
-        {
-          label: 'Femmes — Taux (%)',
-          data: DATA_ROLE.tauxFemmes,
-          backgroundColor: COULEURS.femmes.fond,
-          borderColor: COULEURS.femmes.bord,
-          borderWidth: 2,
-          borderRadius: 4
-        }
-      ]
-    },
-    options: {
-      ...OPTS_BASE,
-      plugins: {
-        ...OPTS_BASE.plugins,
-        tooltip: {
-          callbacks: {
-            label: (ctx) => ` ${ctx.dataset.label}: ${ctx.parsed.y}%`
-          }
-        }
+        x: scaleOpts.x,
+        y: { ...scaleOpts.y, ticks: { callback: v => v + '%', color: '#64748b' } }
       },
+      plugins: { ...BASE.plugins, tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label} : ${ctx.parsed.y}%` } } }
+    }
+  });
+
+  // Luminosité
+  mkChart('chartLumi', {
+    type: 'bar',
+    data: {
+      labels: ['Plein jour', 'Crépuscule', 'Nuit éclairée', 'Nuit non éclairée'],
+      datasets: [{
+        label: 'Taux mortalité %',
+        data: [1.72, 2.14, 2.58, 4.21],
+        backgroundColor: ['rgba(34,197,94,0.75)','rgba(234,179,8,0.75)','rgba(249,115,22,0.75)','rgba(239,68,68,0.75)'],
+        borderColor: ['#22c55e','#eab308','#f97316','#ef4444'],
+        borderWidth: 2, borderRadius: 5
+      }]
+    },
+    options: {
+      ...BASE,
+      indexAxis: 'y',
       scales: {
-        x: { ticks: { color: '#94a3b8' }, grid: { color: '#1e2d42' } },
-        y: {
-          ticks: { color: '#94a3b8', callback: v => v + '%' },
-          grid: { color: '#1e2d42' },
-          title: { display: true, text: 'Taux de mortalité (%)', color: '#64748b' }
-        }
+        x: { ...scaleOpts.x, ticks: { callback: v => v + '%', color: '#64748b' } },
+        y: scaleOpts.y
+      },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` ${ctx.parsed.x}%` } } }
+    }
+  });
+
+  // Type de route
+  mkChart('chartRoute', {
+    type: 'doughnut',
+    data: {
+      labels: ['Hors agglo (route)', 'Hors agglo (autoroute)', 'En agglomération'],
+      datasets: [{
+        data: [1748, 634, 885],
+        backgroundColor: [C.r.bg, C.o.bg, C.c.bg],
+        borderColor: [C.r.border, C.o.border, C.c.border],
+        borderWidth: 2, hoverOffset: 8
+      }]
+    },
+    options: {
+      ...BASE, cutout: '55%',
+      plugins: { legend: legendOpts, tooltip: { callbacks: { label: ctx => ` ${ctx.label} : ${ctx.parsed} tués` } } }
+    }
+  });
+}
+
+// ══════════════════════════════════════════════
+// SECTION 2 — RÉGIONS
+// ══════════════════════════════════════════════
+let currentSort = 'nb_tues';
+let sortAsc = false;
+
+function initRegions() {
+  renderRegionTable(currentSort, sortAsc);
+  renderRegionCharts();
+}
+
+function tauxClass(v) {
+  if (v >= 3.0) return 'high';
+  if (v >= 2.2) return 'medium';
+  return 'low';
+}
+
+function renderRegionTable(sortKey, asc) {
+  const data = [...REGIONS].filter(r => r.region !== 'Non renseigné');
+  data.sort((a, b) => {
+    const va = a[sortKey], vb = b[sortKey];
+    if (typeof va === 'string') return asc ? va.localeCompare(vb) : vb.localeCompare(va);
+    return asc ? va - vb : vb - va;
+  });
+
+  const maxTotal = Math.max(...data.map(d => d.total_victimes));
+
+  const tbody = document.getElementById('region-tbody');
+  tbody.innerHTML = data.map((r, i) => {
+    const pctH = Math.round((r.victimes_hommes / r.total_victimes) * 100);
+    const pctF = 100 - pctH;
+    const barW = Math.round((r.nb_tues / data[0].nb_tues) * 120);
+    return `
+    <tr>
+      <td>
+        <span style="color:var(--muted);font-size:0.75rem;margin-right:0.5rem">${i+1}</span>
+        <span class="region-name">${r.region}</span>
+      </td>
+      <td>
+        <div class="bar-wrap">
+          <div class="mini-bar bar-men" style="width:${Math.round(r.total_victimes/maxTotal*80)}px"></div>
+          <span class="bar-val">${r.total_victimes.toLocaleString('fr-FR')}</span>
+        </div>
+      </td>
+      <td><span class="pill-h">${r.victimes_hommes.toLocaleString('fr-FR')}</span></td>
+      <td><span class="pill-f">${r.victimes_femmes.toLocaleString('fr-FR')}</span></td>
+      <td>
+        <div class="bar-wrap">
+          <div class="mini-bar bar-death" style="width:${barW}px"></div>
+          <span class="bar-val" style="color:#fca5a5;font-weight:700">${r.nb_tues}</span>
+        </div>
+      </td>
+      <td><span class="taux ${tauxClass(r.taux_mortalite_pct)}">${r.taux_mortalite_pct}%</span></td>
+      <td><span class="taux ${tauxClass(r.taux_mortalite_hommes_pct)}">${r.taux_mortalite_hommes_pct}%</span></td>
+      <td><span class="taux ${tauxClass(r.taux_mortalite_femmes_pct)}">${r.taux_mortalite_femmes_pct}%</span></td>
+      <td>
+        <div style="display:flex;height:8px;border-radius:4px;overflow:hidden;min-width:100px">
+          <div style="width:${pctH}%;background:var(--blue);opacity:0.8"></div>
+          <div style="width:${pctF}%;background:var(--pink);opacity:0.8"></div>
+        </div>
+        <div style="font-size:0.7rem;color:var(--muted);margin-top:2px">${pctH}% H · ${pctF}% F</div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function sortRegions(key, btn) {
+  if (currentSort === key) sortAsc = !sortAsc;
+  else { currentSort = key; sortAsc = false; }
+  document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderRegionTable(currentSort, sortAsc);
+}
+
+function renderRegionCharts() {
+  const top8 = [...REGIONS].filter(r => r.region !== 'Non renseigné').sort((a,b) => b.nb_tues - a.nb_tues).slice(0, 8);
+
+  mkChart('chartRegionBar', {
+    type: 'bar',
+    data: {
+      labels: top8.map(r => r.region.length > 18 ? r.region.slice(0,18)+'…' : r.region),
+      datasets: [
+        { label: 'Tués hommes', data: top8.map(r => r.tues_hommes), backgroundColor: C.h.bg, borderColor: C.h.border, borderWidth: 2, borderRadius: 4 },
+        { label: 'Tuées femmes', data: top8.map(r => r.tues_femmes), backgroundColor: C.f.bg, borderColor: C.f.border, borderWidth: 2, borderRadius: 4 }
+      ]
+    },
+    options: {
+      ...BASE,
+      indexAxis: 'y',
+      scales: {
+        x: { ...scaleOpts.x, stacked: false },
+        y: { ...scaleOpts.y, ticks: { color: '#94a3b8', font: { size: 11 } } }
+      }
+    }
+  });
+
+  mkChart('chartRegionTaux', {
+    type: 'bar',
+    data: {
+      labels: top8.map(r => r.region.length > 18 ? r.region.slice(0,18)+'…' : r.region),
+      datasets: [
+        { label: 'Taux H %', data: top8.map(r => r.taux_mortalite_hommes_pct), backgroundColor: C.h.bg, borderColor: C.h.border, borderWidth: 2, borderRadius: 4 },
+        { label: 'Taux F %', data: top8.map(r => r.taux_mortalite_femmes_pct), backgroundColor: C.f.bg, borderColor: C.f.border, borderWidth: 2, borderRadius: 4 }
+      ]
+    },
+    options: {
+      ...BASE,
+      scales: {
+        x: { ...scaleOpts.x, ticks: { color: '#94a3b8', font: { size: 11 } } },
+        y: { ...scaleOpts.y, ticks: { callback: v => v + '%', color: '#64748b' } }
       }
     }
   });
 }
 
-// ================================================================
-// INITIALISATION
-// ================================================================
-initKPI();
-initTable();
-initChartGravite();
-initChartPieTues();
-initChartMois();
-initChartAge();
-initChartRole();
+// ══════════════════════════════════════════════
+// SECTION 3 — TENDANCES
+// ══════════════════════════════════════════════
+function initTendances() {
+  const labels = TENDANCES.map(d => d.an);
+
+  mkChart('chartTendance', {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Total tués', data: TENDANCES.map(d => d.tues), borderColor: C.r.border, backgroundColor: C.r.light, borderWidth: 2.5, fill: true, tension: 0.4, pointBackgroundColor: C.r.border, pointRadius: 5 },
+        { label: 'Hommes tués', data: TENDANCES.map(d => d.tues_h), borderColor: C.h.border, backgroundColor: 'transparent', borderWidth: 2, tension: 0.4, pointBackgroundColor: C.h.border, pointRadius: 4, borderDash: [6,3] },
+        { label: 'Femmes tuées', data: TENDANCES.map(d => d.tues_f), borderColor: C.f.border, backgroundColor: 'transparent', borderWidth: 2, tension: 0.4, pointBackgroundColor: C.f.border, pointRadius: 4, borderDash: [6,3] }
+      ]
+    },
+    options: {
+      ...BASE,
+      scales: {
+        x: scaleOpts.x,
+        y: { ...scaleOpts.y, title: { display: true, text: 'Nombre de tués', color: '#475569' } }
+      },
+      plugins: {
+        legend: legendOpts,
+        annotation: {}
+      }
+    }
+  });
+
+  mkChart('chartTauxEvol', {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Taux H %', data: TENDANCES.map(d => d.tx_h), borderColor: C.h.border, backgroundColor: C.h.light, borderWidth: 2.5, fill: true, tension: 0.4, pointBackgroundColor: C.h.border, pointRadius: 4 },
+        { label: 'Taux F %', data: TENDANCES.map(d => d.tx_f), borderColor: C.f.border, backgroundColor: C.f.light, borderWidth: 2.5, fill: true, tension: 0.4, pointBackgroundColor: C.f.border, pointRadius: 4 }
+      ]
+    },
+    options: {
+      ...BASE,
+      scales: {
+        x: scaleOpts.x,
+        y: { ...scaleOpts.y, ticks: { callback: v => v + '%', color: '#64748b' } }
+      }
+    }
+  });
+
+  mkChart('chartCovid', {
+    type: 'bar',
+    data: {
+      labels: ['Avant COVID\n(moy. 2017–19)', 'Pendant COVID\n(moy. 2020–21)', 'Après COVID\n(2022)'],
+      datasets: [
+        { label: 'Tués hommes', data: [2504, 2033, 2463], backgroundColor: C.h.bg, borderColor: C.h.border, borderWidth: 2, borderRadius: 6 },
+        { label: 'Tuées femmes', data: [822, 673, 804],   backgroundColor: C.f.bg, borderColor: C.f.border, borderWidth: 2, borderRadius: 6 }
+      ]
+    },
+    options: {
+      ...BASE,
+      scales: scaleOpts,
+      plugins: { legend: legendOpts }
+    }
+  });
+
+  // Tableau tendances
+  const table = document.getElementById('trend-table');
+  table.innerHTML = `
+    <thead>
+      <tr>
+        <th>Année</th>
+        <th>Total victimes</th>
+        <th>Tués total</th>
+        <th>Tués H</th>
+        <th>Tuées F</th>
+        <th>Part hommes</th>
+        <th>Taux H</th>
+        <th>Taux F</th>
+        <th>Écart</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${TENDANCES.map((d, i) => {
+        const prev = TENDANCES[i-1];
+        const delta = prev ? d.tues - prev.tues : null;
+        const deltaHtml = delta === null ? '' : delta > 0
+          ? `<span class="delta-up">▲ ${delta}</span>`
+          : `<span class="delta-down">▼ ${Math.abs(delta)}</span>`;
+        const pctH = ((d.tues_h / d.tues) * 100).toFixed(1);
+        const isCovid = d.an === 2020 || d.an === 2021;
+        return `<tr style="${isCovid ? 'background:rgba(6,182,212,0.04)' : ''}">
+          <td><span class="year-badge">${d.an}</span>${isCovid ? ' <span style="font-size:0.7rem;color:var(--cyan)">COVID</span>' : ''}</td>
+          <td>${d.total.toLocaleString('fr-FR')}</td>
+          <td style="font-weight:700;color:#fca5a5">${d.tues.toLocaleString('fr-FR')} ${deltaHtml}</td>
+          <td><span class="pill-h">${d.tues_h.toLocaleString('fr-FR')}</span></td>
+          <td><span class="pill-f">${d.tues_f.toLocaleString('fr-FR')}</span></td>
+          <td>${pctH}%</td>
+          <td style="color:#93c5fd;font-weight:600">${d.tx_h}%</td>
+          <td style="color:#f9a8d4;font-weight:600">${d.tx_f}%</td>
+          <td style="color:var(--orange);font-weight:600">${(d.tx_h - d.tx_f).toFixed(2)} pts</td>
+        </tr>`;
+      }).join('')}
+    </tbody>`;
+}
+
+// ══════════════════════════════════════════════
+// SECTION 4 — PROFIL
+// ══════════════════════════════════════════════
+function initProfil() {
+  const ageLabels = ['< 18', '18–25', '26–35', '36–50', '51–65', '> 65'];
+
+  mkChart('chartAge', {
+    type: 'bar',
+    data: {
+      labels: ageLabels,
+      datasets: [
+        { label: 'Hommes', data: [98, 624, 512, 584, 492, 153], backgroundColor: C.h.bg, borderColor: C.h.border, borderWidth: 2, borderRadius: 5 },
+        { label: 'Femmes', data: [46, 113, 91, 143, 188, 223], backgroundColor: C.f.bg, borderColor: C.f.border, borderWidth: 2, borderRadius: 5 }
+      ]
+    },
+    options: { ...BASE, scales: scaleOpts }
+  });
+
+  mkChart('chartRadar', {
+    type: 'radar',
+    data: {
+      labels: ageLabels,
+      datasets: [
+        { label: 'Hommes', data: [3.1, 5.8, 3.6, 3.2, 2.9, 1.8], borderColor: C.h.border, backgroundColor: C.h.light, borderWidth: 2, pointBackgroundColor: C.h.border },
+        { label: 'Femmes', data: [1.9, 2.1, 1.6, 1.7, 1.8, 2.4], borderColor: C.f.border, backgroundColor: C.f.light, borderWidth: 2, pointBackgroundColor: C.f.border }
+      ]
+    },
+    options: {
+      ...BASE,
+      scales: { r: { ticks: { color: '#64748b', backdropColor: 'transparent' }, grid: { color: 'rgba(30,45,69,0.8)' }, pointLabels: { color: '#94a3b8' } } }
+    }
+  });
+
+  mkChart('chartHeure', {
+    type: 'bar',
+    data: {
+      labels: ['Nuit\n(22h–6h)', 'Matin\n(6h–12h)', 'Après-midi\n(12h–18h)', 'Soirée\n(18h–22h)'],
+      datasets: [
+        { label: 'Hommes', data: [785, 492, 742, 444], backgroundColor: C.h.bg, borderColor: C.h.border, borderWidth: 2, borderRadius: 5 },
+        { label: 'Femmes', data: [196, 168, 271, 169], backgroundColor: C.f.bg, borderColor: C.f.border, borderWidth: 2, borderRadius: 5 }
+      ]
+    },
+    options: { ...BASE, scales: scaleOpts }
+  });
+
+  mkChart('chartVehicule', {
+    type: 'doughnut',
+    data: {
+      labels: ['Voiture', '2-roues motorisé', 'Piéton', 'Poids lourd', 'Vélo / EDP', 'Autre'],
+      datasets: [{
+        data: [1421, 842, 548, 182, 162, 112],
+        backgroundColor: [C.h.bg, C.r.bg, C.f.bg, C.o.bg, C.g.bg, C.p.bg],
+        borderColor: [C.h.border, C.r.border, C.f.border, C.o.border, C.g.border, C.p.border],
+        borderWidth: 2, hoverOffset: 8
+      }]
+    },
+    options: { ...BASE, cutout: '55%', plugins: { legend: { ...legendOpts, position: 'right' } } }
+  });
+
+  mkChart('chartMeteo', {
+    type: 'bar',
+    data: {
+      labels: ['Normal', 'Pluie', 'Brouillard', 'Vent fort', 'Neige/grêle'],
+      datasets: [{
+        label: 'Tués',
+        data: [2487, 498, 132, 87, 63],
+        backgroundColor: [C.g.bg, C.c.bg, C.p.bg, C.o.bg, C.h.bg],
+        borderColor: [C.g.border, C.c.border, C.p.border, C.o.border, C.h.border],
+        borderWidth: 2, borderRadius: 5
+      }]
+    },
+    options: { ...BASE, scales: scaleOpts, plugins: { legend: { display: false } } }
+  });
+}
+
+// ══════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════
+initVueEnsemble();
 </script>
 </body>
 </html>
