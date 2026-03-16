@@ -63,10 +63,11 @@ etl-accidents/
 
 ---
 
-### 0. Cloner / ouvrir le projet
+### 0. Cloner le projet
 
 ```bash
-cd etl-accidents
+git clone https://github.com/axel-dlm/Projet-Big-data.git
+cd Projet-Big-data
 ```
 
 ---
