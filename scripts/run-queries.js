@@ -291,11 +291,179 @@ async function requete8() {
 }
 
 // ─────────────────────────────────────────────
+// REQUÊTE 9 : Évolution du taux de mortalité par année et sexe
+// ─────────────────────────────────────────────
+async function requete9() {
+  const resultats = await db.raw(`
+    SELECT
+      s.libelle                                                 AS sexe,
+      fu.annee_donnees                                          AS annee,
+      COUNT(*)                                                  AS total_victimes,
+      COUNT(*) FILTER (WHERE fu.id_gravite = 2)                AS nb_tues,
+      ROUND(
+        COUNT(*) FILTER (WHERE fu.id_gravite = 2) * 100.0 /
+        NULLIF(COUNT(*), 0), 2
+      )                                                         AS taux_mortalite_pct,
+      ROUND(
+        COUNT(*) FILTER (WHERE fu.id_gravite = 2) * 100.0 /
+        NULLIF(SUM(COUNT(*) FILTER (WHERE fu.id_gravite = 2))
+               OVER (PARTITION BY fu.annee_donnees), 0), 1
+      )                                                         AS part_tues_annee_pct
+    FROM fait_usagers fu
+    JOIN dim_sexe s ON fu.id_sexe = s.id_sexe
+    WHERE fu.annee_donnees IS NOT NULL
+    GROUP BY fu.id_sexe, s.libelle, fu.annee_donnees
+    ORDER BY fu.annee_donnees, fu.id_sexe
+  `);
+  afficherResultats('REQUÊTE 9 — Évolution du taux de mortalité par année et sexe', resultats.rows);
+  sauvegarderJson('req9_evolution_annee.json', resultats.rows);
+  return resultats.rows;
+}
+
+// ─────────────────────────────────────────────
+// REQUÊTE 10 : Nombre total de tués par année et sexe
+// ─────────────────────────────────────────────
+async function requete10() {
+  const resultats = await db.raw(`
+    SELECT
+      fu.annee_donnees                                          AS annee,
+      COUNT(*) FILTER (WHERE fu.id_sexe = 1 AND fu.id_gravite = 2) AS tues_hommes,
+      COUNT(*) FILTER (WHERE fu.id_sexe = 2 AND fu.id_gravite = 2) AS tues_femmes,
+      COUNT(*) FILTER (WHERE fu.id_gravite = 2)                AS total_tues,
+      ROUND(
+        COUNT(*) FILTER (WHERE fu.id_sexe = 1 AND fu.id_gravite = 2) * 100.0 /
+        NULLIF(COUNT(*) FILTER (WHERE fu.id_sexe = 1), 0), 2
+      )                                                         AS taux_mortalite_hommes,
+      ROUND(
+        COUNT(*) FILTER (WHERE fu.id_sexe = 2 AND fu.id_gravite = 2) * 100.0 /
+        NULLIF(COUNT(*) FILTER (WHERE fu.id_sexe = 2), 0), 2
+      )                                                         AS taux_mortalite_femmes
+    FROM fait_usagers fu
+    WHERE fu.annee_donnees IS NOT NULL
+    GROUP BY fu.annee_donnees
+    ORDER BY fu.annee_donnees
+  `);
+  afficherResultats('REQUÊTE 10 — Nombre de tués par année et sexe', resultats.rows);
+  sauvegarderJson('req10_tues_par_annee.json', resultats.rows);
+  return resultats.rows;
+}
+
+// ─────────────────────────────────────────────
+// REQUÊTE 11 : Année la plus meurtrière par sexe
+// ─────────────────────────────────────────────
+async function requete11() {
+  const resultats = await db.raw(`
+    WITH tues_par_annee AS (
+      SELECT
+        s.libelle                                               AS sexe,
+        fu.annee_donnees                                        AS annee,
+        COUNT(*) FILTER (WHERE fu.id_gravite = 2)              AS nb_tues,
+        RANK() OVER (
+          PARTITION BY fu.id_sexe
+          ORDER BY COUNT(*) FILTER (WHERE fu.id_gravite = 2) DESC
+        )                                                       AS rang
+      FROM fait_usagers fu
+      JOIN dim_sexe s ON fu.id_sexe = s.id_sexe
+      WHERE fu.annee_donnees IS NOT NULL
+      GROUP BY fu.id_sexe, s.libelle, fu.annee_donnees
+    )
+    SELECT sexe, annee, nb_tues, rang
+    FROM tues_par_annee
+    WHERE rang <= 3
+    ORDER BY sexe, rang
+  `);
+  afficherResultats('REQUÊTE 11 — Top 3 années les plus meurtrières par sexe', resultats.rows);
+  sauvegarderJson('req11_annees_meurtieres.json', resultats.rows);
+  return resultats.rows;
+}
+
+// ─────────────────────────────────────────────
+// REQUÊTE 12 : Évolution du ratio H/F parmi les tués
+// ─────────────────────────────────────────────
+async function requete12() {
+  const resultats = await db.raw(`
+    WITH pivot AS (
+      SELECT
+        fu.annee_donnees                                        AS annee,
+        COUNT(*) FILTER (WHERE fu.id_sexe = 1 AND fu.id_gravite = 2) AS tues_h,
+        COUNT(*) FILTER (WHERE fu.id_sexe = 2 AND fu.id_gravite = 2) AS tues_f,
+        COUNT(*) FILTER (WHERE fu.id_gravite = 2)              AS total_tues
+      FROM fait_usagers fu
+      WHERE fu.annee_donnees IS NOT NULL
+      GROUP BY fu.annee_donnees
+    )
+    SELECT
+      annee,
+      tues_h,
+      tues_f,
+      total_tues,
+      ROUND(tues_h * 100.0 / NULLIF(total_tues, 0), 1)         AS pct_hommes,
+      ROUND(tues_f * 100.0 / NULLIF(total_tues, 0), 1)         AS pct_femmes,
+      ROUND(tues_h::NUMERIC / NULLIF(tues_f, 0), 2)            AS ratio_h_pour_1f,
+      ROUND(
+        tues_h * 100.0 / NULLIF(total_tues, 0) -
+        LAG(tues_h * 100.0 / NULLIF(total_tues, 0)) OVER (ORDER BY annee),
+        1
+      )                                                         AS variation_pct_vs_annee_prec
+    FROM pivot
+    ORDER BY annee
+  `);
+  afficherResultats('REQUÊTE 12 — Évolution du ratio H/F parmi les tués', resultats.rows);
+  sauvegarderJson('req12_ratio_hf_annees.json', resultats.rows);
+  return resultats.rows;
+}
+
+// ─────────────────────────────────────────────
+// REQUÊTE 13 : Avant / Pendant / Après COVID
+// ─────────────────────────────────────────────
+async function requete13() {
+  const resultats = await db.raw(`
+    WITH periodes AS (
+      SELECT
+        fu.id_sexe,
+        s.libelle                                               AS sexe,
+        CASE
+          WHEN fu.annee_donnees = 2019              THEN 'Avant COVID (2019)'
+          WHEN fu.annee_donnees IN (2020, 2021)     THEN 'Pendant COVID (2020-2021)'
+          WHEN fu.annee_donnees = 2022              THEN 'Après COVID (2022)'
+          ELSE 'Autre'
+        END                                                     AS periode,
+        fu.id_gravite,
+        fu.annee_donnees
+      FROM fait_usagers fu
+      JOIN dim_sexe s ON fu.id_sexe = s.id_sexe
+      WHERE fu.annee_donnees IN (2019, 2020, 2021, 2022)
+    )
+    SELECT
+      sexe,
+      periode,
+      COUNT(*)                                                  AS total_victimes,
+      COUNT(*) FILTER (WHERE id_gravite = 2)                   AS nb_tues,
+      ROUND(
+        COUNT(*) FILTER (WHERE id_gravite = 2) * 100.0 /
+        NULLIF(COUNT(*), 0), 2
+      )                                                         AS taux_mortalite_pct
+    FROM periodes
+    GROUP BY id_sexe, sexe, periode
+    ORDER BY id_sexe,
+      CASE periode
+        WHEN 'Avant COVID (2019)'        THEN 1
+        WHEN 'Pendant COVID (2020-2021)' THEN 2
+        WHEN 'Après COVID (2022)'        THEN 3
+        ELSE 4
+      END
+  `);
+  afficherResultats('REQUÊTE 13 — Comparaison Avant / Pendant / Après COVID', resultats.rows);
+  sauvegarderJson('req13_covid.json', resultats.rows);
+  return resultats.rows;
+}
+
+// ─────────────────────────────────────────────
 // MAIN
 // ─────────────────────────────────────────────
 async function main() {
   console.log('\n' + '█'.repeat(70));
-  console.log('  ANALYSE — Accidents de la Route France 2022 — Mortalité par sexe');
+  console.log('  ANALYSE — Accidents de la Route France — Mortalité par sexe');
   console.log('█'.repeat(70));
 
   try {
@@ -303,6 +471,20 @@ async function main() {
     await db.raw('SELECT 1');
     console.log('  ✓ Connexion à la base de données OK');
 
+    // Vérifier les années disponibles en base
+    const annees = await db.raw(`
+      SELECT annee_donnees, COUNT(*) AS nb_usagers
+      FROM fait_usagers
+      WHERE annee_donnees IS NOT NULL
+      GROUP BY annee_donnees
+      ORDER BY annee_donnees
+    `);
+    console.log(`\n  Années en base : ${annees.rows.map(r => r.annee_donnees).join(', ')}`);
+    console.log(`  (${annees.rows.length} année(s) chargée(s))`);
+
+    const multiAnnees = annees.rows.length > 1;
+
+    // Requêtes principales (toujours disponibles)
     await requete1();
     await requete2();
     await requete3();
@@ -311,6 +493,21 @@ async function main() {
     await requete6();
     await requete7();
     await requete8();
+
+    // Requêtes multi-années (seulement si plusieurs années en base)
+    if (multiAnnees) {
+      console.log('\n' + '▓'.repeat(70));
+      console.log('  ANALYSES MULTI-ANNÉES (tendances 10 ans)');
+      console.log('▓'.repeat(70));
+      await requete9();
+      await requete10();
+      await requete11();
+      await requete12();
+      await requete13();
+    } else {
+      console.log('\n  ℹ  Requêtes multi-années ignorées (1 seule année en base)');
+      console.log('  → Pour les tendances 10 ans : npm run etl:full');
+    }
 
     console.log('\n' + '═'.repeat(70));
     console.log('  ✓ Toutes les analyses terminées. Résultats dans output/');
