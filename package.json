@@ -1,0 +1,19 @@
+{
+  "name": "etl-accidents",
+  "version": "1.0.0",
+  "description": "Projet ETL - Accidents de la route en France (mortalité par sexe)",
+  "main": "etl.js",
+  "scripts": {
+    "download": "node scripts/download.js",
+    "etl": "node etl.js",
+    "analyze": "node scripts/run-queries.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "csv-parse": "^5.5.6",
+    "dotenv": "^16.4.5",
+    "knex": "^3.1.0",
+    "pg": "^8.12.0"
+  }
+}

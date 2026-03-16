@@ -1,0 +1,19 @@
+# Variables d'environnement (connexion base de données - NE PAS COMMITER)
+.env
+
+# Dépendances Node.js
+node_modules/
+
+# Données CSV (fichiers volumineux)
+data/*.csv
+
+# Fichiers générés
+output/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db

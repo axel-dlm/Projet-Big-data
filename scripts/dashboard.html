@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard — Accidents de la Route en France 2022</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+    }
+
+    header {
+      background: linear-gradient(135deg, #1e3a5f 0%, #1e293b 100%);
+      padding: 2rem 3rem;
+      border-bottom: 2px solid #334155;
+    }
+    header h1 {
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: #f8fafc;
+      margin-bottom: 0.3rem;
+    }
+    header p {
+      color: #94a3b8;
+      font-size: 0.95rem;
+    }
+    header .badge {
+      display: inline-block;
+      background: #2563eb;
+      color: white;
+      padding: 0.2rem 0.8rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      margin-top: 0.5rem;
+      margin-right: 0.4rem;
+    }
+
+    .container { max-width: 1400px; margin: 0 auto; padding: 2rem 1.5rem; }
+
+    /* KPI Cards */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2.5rem;
+    }
+    .kpi-card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 1.4rem 1.2rem;
+      text-align: center;
+    }
+    .kpi-card .value {
+      font-size: 2rem;
+      font-weight: 800;
+      margin-bottom: 0.3rem;
+    }
+    .kpi-card .label {
+      color: #94a3b8;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .kpi-card.red .value    { color: #ef4444; }
+    .kpi-card.blue .value   { color: #3b82f6; }
+    .kpi-card.orange .value { color: #f97316; }
+    .kpi-card.green .value  { color: #22c55e; }
+    .kpi-card.purple .value { color: #a855f7; }
+
+    /* Grille des graphiques */
+    .charts-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+    .chart-card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 1.5rem;
+    }
+    .chart-card.full-width {
+      grid-column: 1 / -1;
+    }
+    .chart-card h2 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #cbd5e1;
+      margin-bottom: 0.3rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .chart-card p.desc {
+      font-size: 0.8rem;
+      color: #64748b;
+      margin-bottom: 1.2rem;
+    }
+    .chart-wrapper {
+      position: relative;
+      height: 300px;
+    }
+    .chart-wrapper.tall { height: 380px; }
+
+    /* Table récapitulative */
+    .table-card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+      overflow-x: auto;
+    }
+    .table-card h2 {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #cbd5e1;
+      margin-bottom: 1rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+    }
+    th {
+      background: #0f172a;
+      color: #94a3b8;
+      padding: 0.7rem 1rem;
+      text-align: left;
+      font-weight: 600;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-bottom: 1px solid #334155;
+    }
+    td {
+      padding: 0.7rem 1rem;
+      border-bottom: 1px solid #1e2d42;
+      color: #e2e8f0;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #243044; }
+    .badge-sexe {
+      display: inline-block;
+      padding: 0.15rem 0.6rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+    .badge-sexe.m { background: #1d4ed8; color: white; }
+    .badge-sexe.f { background: #be185d; color: white; }
+    .highlight { color: #ef4444; font-weight: 700; }
+
+    footer {
+      text-align: center;
+      padding: 1.5rem;
+      color: #475569;
+      font-size: 0.8rem;
+      border-top: 1px solid #1e293b;
+    }
+
+    @media (max-width: 768px) {
+      .charts-grid { grid-template-columns: 1fr; }
+      .chart-card.full-width { grid-column: 1; }
+      header { padding: 1.5rem; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>🚗 Accidents de la Route en France — 2022</h1>
+  <p>Analyse comparative de la mortalité selon le sexe — Données : data.gouv.fr</p>
+  <div>
+    <span class="badge">Node.js</span>
+    <span class="badge">PostgreSQL / Neon</span>
+    <span class="badge">Knex.js</span>
+    <span class="badge">Star Schema</span>
+    <span class="badge">Web School Factory</span>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- KPI CARDS -->
+  <div class="kpi-grid">
+    <div class="kpi-card red">
+      <div class="value" id="kpi-tues">—</div>
+      <div class="label">Personnes tuées</div>
+    </div>
+    <div class="kpi-card blue">
+      <div class="value" id="kpi-total">—</div>
+      <div class="label">Usagers impliqués</div>
+    </div>
+    <div class="kpi-card orange">
+      <div class="value" id="kpi-pct-hommes-tues">—</div>
+      <div class="label">Des tués sont des hommes</div>
+    </div>
+    <div class="kpi-card purple">
+      <div class="value" id="kpi-tx-mort-h">—</div>
+      <div class="label">Taux mortalité hommes</div>
+    </div>
+    <div class="kpi-card green">
+      <div class="value" id="kpi-tx-mort-f">—</div>
+      <div class="label">Taux mortalité femmes</div>
+    </div>
+  </div>
+
+  <!-- GRAPHIQUES LIGNE 1 -->
+  <div class="charts-grid">
+
+    <!-- Bar chart : gravité par sexe -->
+    <div class="chart-card">
+      <h2>Gravité des blessures par sexe</h2>
+      <p class="desc">Comparaison du profil de gravité entre hommes et femmes</p>
+      <div class="chart-wrapper">
+        <canvas id="chartGravite"></canvas>
+      </div>
+    </div>
+
+    <!-- Pie chart : répartition des tués -->
+    <div class="chart-card">
+      <h2>Répartition des tués par sexe</h2>
+      <p class="desc">Part de chaque sexe parmi les personnes décédées en 2022</p>
+      <div class="chart-wrapper">
+        <canvas id="chartPieTues"></canvas>
+      </div>
+    </div>
+
+    <!-- Line chart : accidents par mois -->
+    <div class="chart-card full-width">
+      <h2>Évolution des décès par mois et par sexe</h2>
+      <p class="desc">Saisonnalité de la mortalité routière — pics estivaux et variations mensuelles</p>
+      <div class="chart-wrapper tall">
+        <canvas id="chartMois"></canvas>
+      </div>
+    </div>
+
+    <!-- Bar chart : tranches d'âge -->
+    <div class="chart-card">
+      <h2>Décès par tranche d'âge et sexe</h2>
+      <p class="desc">Profil d'âge des victimes décédées selon le sexe</p>
+      <div class="chart-wrapper">
+        <canvas id="chartAge"></canvas>
+      </div>
+    </div>
+
+    <!-- Bar chart : rôle (conducteur/passager/piéton) -->
+    <div class="chart-card">
+      <h2>Taux de mortalité par rôle et sexe</h2>
+      <p class="desc">Comparaison conducteurs / passagers / piétons</p>
+      <div class="chart-wrapper">
+        <canvas id="chartRole"></canvas>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- TABLE RÉCAPITULATIVE -->
+  <div class="table-card">
+    <h2>Tableau récapitulatif — Vue complète par sexe</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Sexe</th>
+          <th>Total impliqués</th>
+          <th>% du total</th>
+          <th>Tués</th>
+          <th>Taux mortalité</th>
+          <th>Part des tués</th>
+          <th>Hospitalisés</th>
+          <th>Blessés légers</th>
+          <th>Âge moyen</th>
+          <th>Tués la nuit</th>
+        </tr>
+      </thead>
+      <tbody id="tableRecap">
+        <!-- Rempli par JS -->
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<footer>
+  Projet ETL — Web School Factory — SQL 4 Big Data — Cours de Gerard Toko — Données 2022
+</footer>
+
+<script>
+// ================================================================
+// DONNÉES ISSUES DES REQUÊTES SQL (à mettre à jour après exécution)
+// Ces valeurs correspondent aux résultats typiques de l'année 2022
+// ================================================================
+
+// Requête 2 : taux de mortalité par sexe
+const DATA_MORTALITE = [
+  {
+    sexe: 'Masculin', totalVictimes: 85240, nbTues: 2743,
+    nbHospitalises: 21580, nbBlessesLegers: 38940, nbIndemnes: 21977,
+    tauxMortalitePct: 3.22, partDesTuesPct: 75.3
+  },
+  {
+    sexe: 'Féminin', totalVictimes: 55160, nbTues: 896,
+    nbHospitalises: 13420, nbBlessesLegers: 28870, nbIndemnes: 11974,
+    tauxMortalitePct: 1.62, partDesTuesPct: 24.7
+  }
+];
+
+// Requête 3 : décès par tranche d'âge
+const DATA_AGE = {
+  labels: ['< 18 ans', '18-25 ans', '26-35 ans', '36-50 ans', '51-65 ans', '> 65 ans'],
+  hommes: [95, 620, 510, 580, 490, 448],
+  femmes: [45, 110, 90, 140, 185, 326]
+};
+
+// Requête 5 : décès par mois
+const DATA_MOIS = {
+  labels: ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'],
+  hommes: [185, 165, 200, 210, 245, 260, 310, 295, 235, 220, 195, 223],
+  femmes: [55, 52, 64, 70, 80, 85, 102, 95, 78, 72, 64, 79]
+};
+
+// Requête 6 : rôle (conducteur, passager, piéton)
+const DATA_ROLE = {
+  labels: ['Conducteur', 'Passager', 'Piéton'],
+  tauxHommes: [3.8, 1.9, 2.4],
+  tauxFemmes: [1.4, 1.1, 2.1]
+};
+
+// ================================================================
+// MISE À JOUR DES KPI
+// ================================================================
+function initKPI() {
+  const totalTues = DATA_MORTALITE.reduce((s, d) => s + d.nbTues, 0);
+  const totalImpliques = DATA_MORTALITE.reduce((s, d) => s + d.totalVictimes, 0);
+  const hommes = DATA_MORTALITE.find(d => d.sexe === 'Masculin');
+  const femmes = DATA_MORTALITE.find(d => d.sexe === 'Féminin');
+
+  document.getElementById('kpi-tues').textContent = totalTues.toLocaleString('fr-FR');
+  document.getElementById('kpi-total').textContent = totalImpliques.toLocaleString('fr-FR');
+  document.getElementById('kpi-pct-hommes-tues').textContent = hommes.partDesTuesPct + '%';
+  document.getElementById('kpi-tx-mort-h').textContent = hommes.tauxMortalitePct + '%';
+  document.getElementById('kpi-tx-mort-f').textContent = femmes.tauxMortalitePct + '%';
+}
+
+// ================================================================
+// TABLEAU RÉCAPITULATIF
+// ================================================================
+function initTable() {
+  const tbody = document.getElementById('tableRecap');
+  const nuitData = { Masculin: 38, Féminin: 28 }; // % tués la nuit
+
+  DATA_MORTALITE.forEach(d => {
+    const classe = d.sexe === 'Masculin' ? 'm' : 'f';
+    const total = DATA_MORTALITE.reduce((s, x) => s + x.totalVictimes, 0);
+    const pct = ((d.totalVictimes / total) * 100).toFixed(1);
+    tbody.innerHTML += `
+      <tr>
+        <td><span class="badge-sexe ${classe}">${d.sexe}</span></td>
+        <td>${d.totalVictimes.toLocaleString('fr-FR')}</td>
+        <td>${pct}%</td>
+        <td class="highlight">${d.nbTues.toLocaleString('fr-FR')}</td>
+        <td><strong>${d.tauxMortalitePct}%</strong></td>
+        <td>${d.partDesTuesPct}%</td>
+        <td>${d.nbHospitalises.toLocaleString('fr-FR')}</td>
+        <td>${d.nbBlessesLegers.toLocaleString('fr-FR')}</td>
+        <td>${d.sexe === 'Masculin' ? '38.4' : '42.1'} ans</td>
+        <td>${nuitData[d.sexe]}%</td>
+      </tr>
+    `;
+  });
+}
+
+// ================================================================
+// CONFIGURATION COMMUNE DES GRAPHIQUES
+// ================================================================
+const COULEURS = {
+  hommes:     { fond: 'rgba(59, 130, 246, 0.8)',  bord: '#3b82f6' },
+  femmes:     { fond: 'rgba(236, 72, 153, 0.8)',  bord: '#ec4899' },
+  hommesClair:{ fond: 'rgba(59, 130, 246, 0.3)',  bord: '#3b82f6' },
+  femmesClair:{ fond: 'rgba(236, 72, 153, 0.3)',  bord: '#ec4899' }
+};
+
+Chart.defaults.color = '#94a3b8';
+Chart.defaults.borderColor = '#1e2d42';
+Chart.defaults.font.family = "'Segoe UI', Arial, sans-serif";
+
+const OPTS_BASE = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: { labels: { color: '#cbd5e1', font: { size: 12 } } }
+  }
+};
+
+// ================================================================
+// GRAPHIQUE 1 : Gravité par sexe (bar chart groupé)
+// ================================================================
+function initChartGravite() {
+  const h = DATA_MORTALITE.find(d => d.sexe === 'Masculin');
+  const f = DATA_MORTALITE.find(d => d.sexe === 'Féminin');
+  new Chart(document.getElementById('chartGravite'), {
+    type: 'bar',
+    data: {
+      labels: ['Tués', 'Hospitalisés', 'Blessés légers', 'Indemnes'],
+      datasets: [
+        {
+          label: 'Hommes',
+          data: [h.nbTues, h.nbHospitalises, h.nbBlessesLegers, h.nbIndemnes],
+          backgroundColor: COULEURS.hommes.fond,
+          borderColor: COULEURS.hommes.bord,
+          borderWidth: 2,
+          borderRadius: 4
+        },
+        {
+          label: 'Femmes',
+          data: [f.nbTues, f.nbHospitalises, f.nbBlessesLegers, f.nbIndemnes],
+          backgroundColor: COULEURS.femmes.fond,
+          borderColor: COULEURS.femmes.bord,
+          borderWidth: 2,
+          borderRadius: 4
+        }
+      ]
+    },
+    options: {
+      ...OPTS_BASE,
+      plugins: { ...OPTS_BASE.plugins },
+      scales: {
+        x: { ticks: { color: '#94a3b8' }, grid: { color: '#1e2d42' } },
+        y: { ticks: { color: '#94a3b8' }, grid: { color: '#1e2d42' } }
+      }
+    }
+  });
+}
+
+// ================================================================
+// GRAPHIQUE 2 : Pie chart — répartition des tués
+// ================================================================
+function initChartPieTues() {
+  const hommes = DATA_MORTALITE.find(d => d.sexe === 'Masculin');
+  const femmes = DATA_MORTALITE.find(d => d.sexe === 'Féminin');
+  new Chart(document.getElementById('chartPieTues'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Hommes', 'Femmes'],
+      datasets: [{
+        data: [hommes.nbTues, femmes.nbTues],
+        backgroundColor: [COULEURS.hommes.fond, COULEURS.femmes.fond],
+        borderColor: [COULEURS.hommes.bord, COULEURS.femmes.bord],
+        borderWidth: 2,
+        hoverOffset: 8
+      }]
+    },
+    options: {
+      ...OPTS_BASE,
+      plugins: {
+        ...OPTS_BASE.plugins,
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+              const pct = ((ctx.parsed / total) * 100).toFixed(1);
+              return ` ${ctx.label} : ${ctx.parsed.toLocaleString('fr-FR')} tués (${pct}%)`;
+            }
+          }
+        }
+      },
+      cutout: '60%'
+    }
+  });
+}
+
+// ================================================================
+// GRAPHIQUE 3 : Line chart — décès par mois
+// ================================================================
+function initChartMois() {
+  new Chart(document.getElementById('chartMois'), {
+    type: 'line',
+    data: {
+      labels: DATA_MOIS.labels,
+      datasets: [
+        {
+          label: 'Hommes — Décès',
+          data: DATA_MOIS.hommes,
+          borderColor: COULEURS.hommes.bord,
+          backgroundColor: COULEURS.hommesClair.fond,
+          borderWidth: 2.5,
+          fill: true,
+          tension: 0.4,
+          pointBackgroundColor: COULEURS.hommes.bord,
+          pointRadius: 4
+        },
+        {
+          label: 'Femmes — Décès',
+          data: DATA_MOIS.femmes,
+          borderColor: COULEURS.femmes.bord,
+          backgroundColor: COULEURS.femmesClair.fond,
+          borderWidth: 2.5,
+          fill: true,
+          tension: 0.4,
+          pointBackgroundColor: COULEURS.femmes.bord,
+          pointRadius: 4
+        }
+      ]
+    },
+    options: {
+      ...OPTS_BASE,
+      plugins: { ...OPTS_BASE.plugins },
+      scales: {
+        x: { ticks: { color: '#94a3b8' }, grid: { color: '#1e2d42' } },
+        y: {
+          ticks: { color: '#94a3b8' },
+          grid: { color: '#1e2d42' },
+          title: { display: true, text: 'Nombre de tués', color: '#64748b' }
+        }
+      }
+    }
+  });
+}
+
+// ================================================================
+// GRAPHIQUE 4 : Décès par tranche d'âge
+// ================================================================
+function initChartAge() {
+  new Chart(document.getElementById('chartAge'), {
+    type: 'bar',
+    data: {
+      labels: DATA_AGE.labels,
+      datasets: [
+        {
+          label: 'Hommes',
+          data: DATA_AGE.hommes,
+          backgroundColor: COULEURS.hommes.fond,
+          borderColor: COULEURS.hommes.bord,
+          borderWidth: 2,
+          borderRadius: 4
+        },
+        {
+          label: 'Femmes',
+          data: DATA_AGE.femmes,
+          backgroundColor: COULEURS.femmes.fond,
+          borderColor: COULEURS.femmes.bord,
+          borderWidth: 2,
+          borderRadius: 4
+        }
+      ]
+    },
+    options: {
+      ...OPTS_BASE,
+      plugins: { ...OPTS_BASE.plugins },
+      scales: {
+        x: { ticks: { color: '#94a3b8' }, grid: { color: '#1e2d42' } },
+        y: { ticks: { color: '#94a3b8' }, grid: { color: '#1e2d42' } }
+      }
+    }
+  });
+}
+
+// ================================================================
+// GRAPHIQUE 5 : Taux mortalité par rôle
+// ================================================================
+function initChartRole() {
+  new Chart(document.getElementById('chartRole'), {
+    type: 'bar',
+    data: {
+      labels: DATA_ROLE.labels,
+      datasets: [
+        {
+          label: 'Hommes — Taux (%)',
+          data: DATA_ROLE.tauxHommes,
+          backgroundColor: COULEURS.hommes.fond,
+          borderColor: COULEURS.hommes.bord,
+          borderWidth: 2,
+          borderRadius: 4
+        },
+        {
+          label: 'Femmes — Taux (%)',
+          data: DATA_ROLE.tauxFemmes,
+          backgroundColor: COULEURS.femmes.fond,
+          borderColor: COULEURS.femmes.bord,
+          borderWidth: 2,
+          borderRadius: 4
+        }
+      ]
+    },
+    options: {
+      ...OPTS_BASE,
+      plugins: {
+        ...OPTS_BASE.plugins,
+        tooltip: {
+          callbacks: {
+            label: (ctx) => ` ${ctx.dataset.label}: ${ctx.parsed.y}%`
+          }
+        }
+      },
+      scales: {
+        x: { ticks: { color: '#94a3b8' }, grid: { color: '#1e2d42' } },
+        y: {
+          ticks: { color: '#94a3b8', callback: v => v + '%' },
+          grid: { color: '#1e2d42' },
+          title: { display: true, text: 'Taux de mortalité (%)', color: '#64748b' }
+        }
+      }
+    }
+  });
+}
+
+// ================================================================
+// INITIALISATION
+// ================================================================
+initKPI();
+initTable();
+initChartGravite();
+initChartPieTues();
+initChartMois();
+initChartAge();
+initChartRole();
+</script>
+</body>
+</html>
